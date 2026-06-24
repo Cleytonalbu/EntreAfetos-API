@@ -1,15 +1,447 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+}
+
+// ─── ENUMS ───────────────────────────────────────────────────────────────────
+
+enum Papel {
+  RECEPCIONISTA
+  PROFISSIONAL
+  GESTOR
+}
+
+enum StatusAgendamento {
+  AGENDADO
+  AGUARDANDO
+  EM_ATENDIMENTO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum StatusPlano {
+  ATIVO
+  EM_REVISAO
+  PAUSADO
+  ENCERRADO
+}
+
+enum StatusObjetivo {
+  EM_ANDAMENTO
+  ALCANCADO
+  PARCIALMENTE_ALCANCADO
+  NAO_TRABALHADO
+}
+
+enum StatusEncaminhamento {
+  PENDENTE
+  ACEITO
+  EM_ATENDIMENTO
+  CONCLUIDO
+  CANCELADO
+}
+
+enum Prioridade {
+  BAIXA
+  MEDIA
+  ALTA
+  URGENTE
+}
+
+enum TipoTransacao {
+  RECEITA
+  DESPESA
+}
+
+enum StatusTransacao {
+  PENDENTE
+  RECEBIDO
+  PAGO
+  VENCIDO
+}
+
+// ─── CLÍNICA ─────────────────────────────────────────────────────────────────
+
+model Clinica {
+  id                              String   @id @default(uuid())
+  nome                            String
+  cnpj                            String   @unique
+  email                           String
+  telefone                        String?
+  endereco                        String?
+  cidade                          String?
+  estado                          String?
+  cep                             String?
+  fusoHorario                     String   @default("America/Sao_Paulo")
+  formatoData                     String   @default("DD/MM/YYYY")
+  ativarLembretes                 Boolean  @default(true)
+  permitirReagendamento           Boolean  @default(true)
+  exigirJustificativaFaltas       Boolean  @default(true)
+  bloquearProntuario              Boolean  @default(false)
+  exibirFinanceiroParaProfissional Boolean @default(false)
+  criadoEm                        DateTime @default(now())
+  atualizadoEm                    DateTime @updatedAt
+
+  configuracaoNotificacoes ConfiguracaoNotificacao[]
+  modelosEvolucao          ModeloEvolucao[]
+}
+
+// ─── USUÁRIO ─────────────────────────────────────────────────────────────────
+
+model Usuario {
+  id           String   @id @default(uuid())
+  nome         String
+  email        String   @unique
+  senha        String?
+  foto         String?
+  papel        Papel
+  ativo        Boolean  @default(true)
+  criadoEm    DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  profissional  Profissional?
+  notificacoes  Notificacao[]
+  mensagens     Mensagem[]
+}
+
+// ─── ESPECIALIDADE ────────────────────────────────────────────────────────────
+
+model Especialidade {
+  id        String  @id @default(uuid())
+  nome      String  @unique
+  descricao String?
+  cor       String?
+  categoria String
+  icone     String?
+  ativo     Boolean @default(true)
+
+  profissionais    ProfissionalEspecialidade[]
+  agendamentos     Agendamento[]
+  encaminhamentos  Encaminhamento[]
+}
+
+// ─── PROFISSIONAL ─────────────────────────────────────────────────────────────
+
+model Profissional {
+  id        String  @id @default(uuid())
+  usuarioId String  @unique
+  registro  String?
+  bio       String?
+
+  usuario       Usuario                    @relation(fields: [usuarioId], references: [id])
+  especialidades ProfissionalEspecialidade[]
+  agendamentos  Agendamento[]
+  evolucoes     Evolucao[]
+  objetivos     Objetivo[]
+  planos        PlanoTerapeutico[]
+  encaminhamentosOrigem Encaminhamento[] @relation("ProfissionalOrigem")
+  encaminhamentosDestino Encaminhamento[] @relation("ProfissionalDestino")
+  transacoes    Transacao[]
+  relatorios    Relatorio[]
+}
+
+model ProfissionalEspecialidade {
+  profissionalId  String
+  especialidadeId String
+
+  profissional  Profissional  @relation(fields: [profissionalId], references: [id])
+  especialidade Especialidade @relation(fields: [especialidadeId], references: [id])
+
+  @@id([profissionalId, especialidadeId])
+}
+
+// ─── PACIENTE ─────────────────────────────────────────────────────────────────
+
+model Paciente {
+  id             String   @id @default(uuid())
+  nome           String
+  dataNascimento DateTime
+  sexo           String
+  foto           String?
+  status         String   @default("ativo")
+  responsavel    String?
+  telefone       String?
+  diagnostico    String?
+  tags           String[]
+  criadoEm      DateTime @default(now())
+  atualizadoEm  DateTime @updatedAt
+
+  agendamentos     Agendamento[]
+  evolucoes        Evolucao[]
+  objetivos        Objetivo[]
+  planos           PlanoTerapeutico[]
+  encaminhamentos  Encaminhamento[]
+  transacoes       Transacao[]
+  relatorios       Relatorio[]
+}
+
+// ─── SERVIÇO / CONVÊNIO / SALA ───────────────────────────────────────────────
+
+model Servico {
+  id        String  @id @default(uuid())
+  nome      String
+  duracaoMin Int
+  descricao String?
+  ativo     Boolean @default(true)
+
+  agendamentos Agendamento[]
+}
+
+model Convenio {
+  id    String  @id @default(uuid())
+  nome  String
+  ativo Boolean @default(true)
+
+  agendamentos Agendamento[]
+}
+
+model Sala {
+  id        String  @id @default(uuid())
+  nome      String
+  descricao String?
+  ativa     Boolean @default(true)
+
+  agendamentos Agendamento[]
+}
+
+// ─── AGENDAMENTO ─────────────────────────────────────────────────────────────
+
+model Agendamento {
+  id              String            @id @default(uuid())
+  pacienteId      String
+  profissionalId  String
+  servicoId       String
+  especialidadeId String?
+  convenioId      String?
+  salaId          String?
+  dataHora        DateTime
+  status          StatusAgendamento @default(AGENDADO)
+  observacoes     String?
+  rascunho        Boolean           @default(false)
+  criadoEm       DateTime          @default(now())
+  atualizadoEm   DateTime          @updatedAt
+
+  paciente      Paciente       @relation(fields: [pacienteId], references: [id])
+  profissional  Profissional   @relation(fields: [profissionalId], references: [id])
+  servico       Servico        @relation(fields: [servicoId], references: [id])
+  especialidade Especialidade? @relation(fields: [especialidadeId], references: [id])
+  convenio      Convenio?      @relation(fields: [convenioId], references: [id])
+  sala          Sala?          @relation(fields: [salaId], references: [id])
+  evolucao      Evolucao?
+}
+
+// ─── PLANO TERAPÊUTICO ────────────────────────────────────────────────────────
+
+model PlanoTerapeutico {
+  id                     String      @id @default(uuid())
+  pacienteId             String
+  profissionalId         String
+  dataAvaliacao          DateTime
+  dataInicio             DateTime
+  dataProximaRevisao     DateTime
+  versao                 String      @default("1.0")
+  especialidadePrincipal String
+  outrasEspecialidades   String[]
+  localAtendimento       String?
+  queixasPrincipais      String?
+  necessidadesIdentificadas String?
+  objetivoGeral          String?
+  estrategiasTerapeuticas String?
+  observacoes            String?
+  frequenciaSemanal      Int?
+  duracaoSessaoMin       Int?
+  totalMensalSessoes     Int?
+  status                 StatusPlano @default(ATIVO)
+  criadoEm              DateTime    @default(now())
+  atualizadoEm          DateTime    @updatedAt
+
+  paciente     Paciente     @relation(fields: [pacienteId], references: [id])
+  profissional Profissional @relation(fields: [profissionalId], references: [id])
+  objetivos    Objetivo[]
+}
+
+// ─── OBJETIVO ─────────────────────────────────────────────────────────────────
+
+model Objetivo {
+  id              String         @id @default(uuid())
+  pacienteId      String
+  profissionalId  String
+  planoId         String?
+  nome            String
+  descricao       String?
+  categoria       String
+  status          StatusObjetivo @default(EM_ANDAMENTO)
+  progresso       Int            @default(0)
+  nivelDesempenho Int?
+  criadoEm       DateTime       @default(now())
+  atualizadoEm   DateTime       @updatedAt
+
+  paciente     Paciente          @relation(fields: [pacienteId], references: [id])
+  profissional Profissional      @relation(fields: [profissionalId], references: [id])
+  plano        PlanoTerapeutico? @relation(fields: [planoId], references: [id])
+  sessoes      ObjetivoSessao[]
+}
+
+// ─── EVOLUÇÃO ─────────────────────────────────────────────────────────────────
+
+model Evolucao {
+  id               String    @id @default(uuid())
+  pacienteId       String
+  profissionalId   String
+  agendamentoId    String?   @unique
+  dataAtendimento  DateTime
+  horaInicio       DateTime
+  horaFim          DateTime
+  especialidade    String
+  tipoAtendimento  String
+  localAtendimento String?
+  evolucaoEscrita  String?
+  resultadoGeral   String?
+  impactos         String[]
+  observacoes      String?
+  assinadoEm       DateTime?
+  rascunho         Boolean   @default(false)
+  criadoEm        DateTime  @default(now())
+  atualizadoEm    DateTime  @updatedAt
+
+  paciente        Paciente         @relation(fields: [pacienteId], references: [id])
+  profissional    Profissional     @relation(fields: [profissionalId], references: [id])
+  agendamento     Agendamento?     @relation(fields: [agendamentoId], references: [id])
+  objetivosSessao ObjetivoSessao[]
+  anexos          Anexo[]
+  encaminhamentos Encaminhamento[]
+}
+
+model ObjetivoSessao {
+  id              String  @id @default(uuid())
+  evolucaoId      String
+  objetivoId      String
+  statusNaSessao  String
+  nivelDesempenho Int?
+
+  evolucao Evolucao @relation(fields: [evolucaoId], references: [id])
+  objetivo Objetivo @relation(fields: [objetivoId], references: [id])
+
+  @@unique([evolucaoId, objetivoId])
+}
+
+model Anexo {
+  id           String   @id @default(uuid())
+  evolucaoId   String
+  nomeArquivo  String
+  tipo         String
+  tamanhoBytes Int
+  url          String
+  criadoEm    DateTime @default(now())
+
+  evolucao Evolucao @relation(fields: [evolucaoId], references: [id])
+}
+
+// ─── ENCAMINHAMENTO ───────────────────────────────────────────────────────────
+
+model Encaminhamento {
+  id                   String               @id @default(uuid())
+  pacienteId           String
+  profissionalOrigemId String
+  profissionalDestinoId String?
+  evolucaoId           String?
+  especialidadeId      String?
+  motivo               String
+  observacoes          String?
+  prioridade           Prioridade           @default(MEDIA)
+  status               StatusEncaminhamento @default(PENDENTE)
+  criadoEm            DateTime             @default(now())
+  atualizadoEm        DateTime             @updatedAt
+
+  paciente             Paciente       @relation(fields: [pacienteId], references: [id])
+  profissionalOrigem   Profissional   @relation("ProfissionalOrigem", fields: [profissionalOrigemId], references: [id])
+  profissionalDestino  Profissional?  @relation("ProfissionalDestino", fields: [profissionalDestinoId], references: [id])
+  evolucao             Evolucao?      @relation(fields: [evolucaoId], references: [id])
+  especialidade        Especialidade? @relation(fields: [especialidadeId], references: [id])
+}
+
+// ─── FINANCEIRO ───────────────────────────────────────────────────────────────
+
+model Transacao {
+  id             String          @id @default(uuid())
+  tipo           TipoTransacao
+  categoria      String
+  descricao      String
+  valor          Decimal         @db.Decimal(10, 2)
+  formaPagamento String?
+  status         StatusTransacao @default(PENDENTE)
+  pacienteId     String?
+  profissionalId String?
+  dataVencimento DateTime?
+  dataPagamento  DateTime?
+  criadoEm      DateTime        @default(now())
+  atualizadoEm  DateTime        @updatedAt
+
+  paciente     Paciente?     @relation(fields: [pacienteId], references: [id])
+  profissional Profissional? @relation(fields: [profissionalId], references: [id])
+}
+
+// ─── RELATÓRIO ────────────────────────────────────────────────────────────────
+
+model Relatorio {
+  id             String   @id @default(uuid())
+  profissionalId String
+  pacienteId     String?
+  tipo           String
+  formato        String   @default("PDF")
+  periodoInicio  DateTime
+  periodoFim     DateTime
+  urlArquivo     String?
+  geradoEm      DateTime @default(now())
+
+  profissional Profissional @relation(fields: [profissionalId], references: [id])
+  paciente     Paciente?    @relation(fields: [pacienteId], references: [id])
+}
+
+// ─── NOTIFICAÇÃO / MENSAGEM ───────────────────────────────────────────────────
+
+model Notificacao {
+  id        String   @id @default(uuid())
+  usuarioId String
+  tipo      String
+  texto     String
+  lida      Boolean  @default(false)
+  criadoEm DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id])
+}
+
+model Mensagem {
+  id         String   @id @default(uuid())
+  remetenteId String
+  texto      String
+  lida       Boolean  @default(false)
+  criadoEm  DateTime @default(now())
+
+  remetente Usuario @relation(fields: [remetenteId], references: [id])
+}
+
+// ─── CONFIGURAÇÕES ────────────────────────────────────────────────────────────
+
+model ConfiguracaoNotificacao {
+  id        String   @id @default(uuid())
+  clinicaId String
+  tipo      String
+  canais    String[]
+
+  clinica Clinica @relation(fields: [clinicaId], references: [id])
+}
+
+model ModeloEvolucao {
+  id            String   @id @default(uuid())
+  clinicaId     String
+  nome          String
+  especialidade String
+  campos        Json
+  criadoEm     DateTime @default(now())
+
+  clinica Clinica @relation(fields: [clinicaId], references: [id])
 }
