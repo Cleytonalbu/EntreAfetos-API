@@ -5,6 +5,7 @@ import 'dotenv/config'
 
 // Rotas
 import { rotasAutenticacao } from './routes/autenticacao'
+import { rotasPacientes } from './routes/pacientes'
 
 const app = Fastify({ logger: true })
 
@@ -19,8 +20,10 @@ app.register(jwt, {
 
 
 // ── Rotas ────────────────────────────────────────────────
-app.register(rotasAutenticacao)
-
+app.register(async (instance) => {
+  instance.register(rotasAutenticacao)
+  instance.register(rotasPacientes)
+})
 // ── Health check ─────────────────────────────────────────
 app.get('/health', async () => {
   return { status: 'ok', projeto: 'Entre Afetos API' }
