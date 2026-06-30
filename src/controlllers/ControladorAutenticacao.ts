@@ -29,6 +29,18 @@ export class ControladorAutenticacao {
       })
     }
 
+    // Valida se o papel é um valor aceito
+    const papeisAceitos = ['ADMIN', 'PSICOLOGO', 'PACIENTE', 'GESTOR']
+    const papelNormalizado = papel.toUpperCase() as Papel
+
+    if (!papeisAceitos.includes(papelNormalizado)) {
+        return reply.status(400).send({
+            erro: 'Dados Inválidos',
+            mensagem: `O papel deve ser um dos seguintes: ${papeisAceitos.join(', ')}`,
+        } )
+    }   
+
+
     // Verifica se email já existe
     const usuarioExistente = await prisma.usuario.findUnique({
       where: { email },
@@ -50,7 +62,7 @@ export class ControladorAutenticacao {
         nome,
         email,
         senha: senhaCriptografada,
-        papel,
+        papel: papelNormalizado,
       },
       select: {
         id: true,
