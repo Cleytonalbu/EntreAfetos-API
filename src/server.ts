@@ -6,6 +6,8 @@ import 'dotenv/config'
 // Rotas
 import { rotasAutenticacao } from './routes/autenticacao'
 import { rotasPacientes } from './routes/pacientes'
+import { rotasAuxiliares } from './routes/auxiliares'
+import { rotasAgendamentos } from './routes/agendamentos'
 
 const app = Fastify({ logger: true })
 
@@ -23,6 +25,8 @@ app.register(jwt, {
 app.register(async (instance) => {
   instance.register(rotasAutenticacao)
   instance.register(rotasPacientes)
+  instance.register(rotasAuxiliares)
+  instance.register(rotasAgendamentos)
 })
 // ── Health check ─────────────────────────────────────────
 app.get('/health', async () => {
