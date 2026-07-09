@@ -16,4 +16,12 @@ export class RepositorioConvenios {
   async criar(nome: string) {
     return prisma.convenio.create({ data: { nome } })
   }
+
+  async atualizar(id: string, nome: string) {
+    return prisma.convenio.update({ where: { id }, data: { nome } })
+  }
+
+  async inativar(id: string) {
+    return prisma.convenio.update({ where: { id }, data: { ativo: false } })
+  }
 }

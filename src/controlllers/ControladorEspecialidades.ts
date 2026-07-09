@@ -16,6 +16,18 @@ export class ControladorEspecialidades {
     }
   }
 
+  async buscarPorId(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { id } = request.params as any
+      const especialidade = await servico.buscarPorId(id)
+      return reply.send({ especialidade })
+    } catch (err: any) {
+      return reply.status(err.status ?? 500).send({
+        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
+      })
+    }
+  } 
+
   async criar(request: FastifyRequest, reply: FastifyReply) {
     try {
       const especialidade = await servico.criar(request.body as any)
@@ -44,6 +56,18 @@ export class ControladorEspecialidades {
       const { id } = request.params as any
       const { ativo } = request.body as any
       const especialidade = await servico.alterarStatus(id, ativo)
+      return reply.send({ especialidade })
+    } catch (err: any) {
+      return reply.status(err.status ?? 500).send({
+        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
+      })
+    }
+  }
+
+  async inativar(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { id } = request.params as any
+      const especialidade = await servico.inativar(id)
       return reply.send({ especialidade })
     } catch (err: any) {
       return reply.status(err.status ?? 500).send({

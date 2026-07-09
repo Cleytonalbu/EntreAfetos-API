@@ -8,6 +8,14 @@ export class ServicoServicos {
     return repositorio.listar()
   }
 
+  async buscarPorId(id: string) {
+    const servico = await repositorio.buscarPorId(id)
+    if (!servico) {
+      throw { status: 404, mensagem: 'Serviço não encontrado' }
+    }
+    return servico
+  }
+
   async criar(dados: { nome: string; duracaoMin: number; descricao?: string }) {
     if (!dados.nome || !dados.duracaoMin) {
       throw { status: 400, mensagem: 'nome e duracaoMin são obrigatórios' }
@@ -22,4 +30,12 @@ export class ServicoServicos {
     }
     return repositorio.atualizar(id, dados)
   }
-}
+
+  async inativar(id: string) {
+    const existe = await repositorio.buscarPorId(id)
+    if (!existe) {
+      throw { status: 404, mensagem: 'Serviço não encontrado' }
+    }
+    return repositorio.inativar(id)
+  }
+} 

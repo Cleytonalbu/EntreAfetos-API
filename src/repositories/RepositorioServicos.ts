@@ -1,6 +1,7 @@
 import prisma from '../lib/prisma'
 
 export class RepositorioServicos {
+
   async buscarPorId(id: string) {
     return prisma.servico.findUnique({ where: { id } })
   }
@@ -11,12 +12,16 @@ export class RepositorioServicos {
       orderBy: { nome: 'asc' },
     })
   }
-
+  
   async criar(dados: { nome: string; duracaoMin: number; descricao?: string }) {
     return prisma.servico.create({ data: dados })
   }
 
   async atualizar(id: string, dados: Partial<{ nome: string; duracaoMin: number; descricao: string }>) {
     return prisma.servico.update({ where: { id }, data: dados })
+  }
+
+  async inativar(id: string) {
+    return prisma.servico.update({ where: { id }, data: { ativo: false } })
   }
 }

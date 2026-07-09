@@ -31,4 +31,8 @@ export class RepositorioEspecialidades {
   async alterarStatus(id: string, ativo: boolean) {
     return prisma.especialidade.update({ where: { id }, data: { ativo } })
   }
+
+  async inativar(id: string) {
+    return prisma.especialidade.update({ where: { id }, data: { ativo: false } })
+  }
 }

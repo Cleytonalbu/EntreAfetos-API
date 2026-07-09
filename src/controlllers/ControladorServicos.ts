@@ -16,6 +16,18 @@ export class ControladorServicos {
     }
   }
 
+  async buscarPorId(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { id } = request.params as any 
+      const servicoEncontrado = await servico.buscarPorId(id)
+        return reply.send({ servico: servicoEncontrado })
+    } catch (err: any) {
+      return reply.status(err.status ?? 500).send({
+        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
+      })
+    }
+  }
+
   async criar(request: FastifyRequest, reply: FastifyReply) {
     try {
       const servicoCriado = await servico.criar(request.body as any)
@@ -32,6 +44,18 @@ export class ControladorServicos {
       const { id } = request.params as any
       const servicoAtualizado = await servico.atualizar(id, request.body as any)
       return reply.send({ servico: servicoAtualizado })
+    } catch (err: any) {
+      return reply.status(err.status ?? 500).send({
+        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
+      })
+    }
+  }
+
+  async inativar(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { id } = request.params as any
+      const servicoInativado = await servico.inativar(id)
+      return reply.send({ servico: servicoInativado })
     } catch (err: any) {
       return reply.status(err.status ?? 500).send({
         erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',

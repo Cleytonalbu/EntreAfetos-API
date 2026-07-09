@@ -8,6 +8,14 @@ export class ServicoEspecialidades {
     return repositorio.listar()
   }
 
+  async buscarPorId(id: string) {
+    const especialidade = await repositorio.buscarPorId(id)
+    if (!especialidade) {
+      throw { status: 404, mensagem: 'Especialidade não encontrada' }
+    }
+    return especialidade
+  }
+
   async criar(dados: {
     nome: string
     descricao?: string
@@ -35,5 +43,13 @@ export class ServicoEspecialidades {
       throw { status: 404, mensagem: 'Especialidade não encontrada' }
     }
     return repositorio.alterarStatus(id, ativo)
+  }
+
+  async inativar(id: string) {
+    const existe = await repositorio.buscarPorId(id)
+    if (!existe) {
+      throw { status: 404, mensagem: 'Especialidade não encontrada' }
+    }
+    return repositorio.inativar(id)
   }
 }

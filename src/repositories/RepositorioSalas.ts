@@ -16,4 +16,12 @@ export class RepositorioSalas {
   async criar(dados: { nome: string; descricao?: string }) {
     return prisma.sala.create({ data: dados })
   }
+
+  async atualizar(id: string, dados: { nome?: string; descricao?: string }) {
+    return prisma.sala.update({ where: { id }, data: dados })
+  }
+
+  async inativar(id: string) {
+    return prisma.sala.update({ where: { id }, data: { ativa: false } })
+  }
 }
