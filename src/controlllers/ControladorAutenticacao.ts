@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { ServicoAutenticacao } from '../services/ServicoAutenticacao'
+import { tratarErroPrisma } from '../lib/prismaErros'
 
 const servico = new ServicoAutenticacao()
 
@@ -23,12 +24,10 @@ export class ControladorAutenticacao {
       )
 
       return reply.status(201).send({ usuario, token })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro',
-        mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
-    }
+    } catch (err) {
+          const { status, mensagem } = tratarErroPrisma(err)
+          return reply.status(status).send({ erro: 'Erro', mensagem })
+      }
   }
 
   async login(request: FastifyRequest, reply: FastifyReply) {
@@ -58,11 +57,9 @@ export class ControladorAutenticacao {
         },
         token,
       })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro',
-        mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 
@@ -70,11 +67,9 @@ export class ControladorAutenticacao {
     try {
       const usuario = await servico.buscarPerfil(request.user.id)
       return reply.send({ usuario })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro',
-        mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 }

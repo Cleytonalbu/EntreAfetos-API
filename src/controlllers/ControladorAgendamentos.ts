@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { ServicoAgendamentos } from '../services/ServicoAgendamentos'
+import { tratarErroPrisma } from '../lib/prismaErros'
 
 const servico = new ServicoAgendamentos()
 
@@ -23,10 +24,9 @@ export class ControladorAgendamentos {
           totalPaginas: Math.ceil(resultado.total / Number(porPagina)),
         },
       })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 
@@ -35,10 +35,9 @@ export class ControladorAgendamentos {
       const { id } = request.params as any
       const agendamento = await servico.buscarPorId(id)
       return reply.send({ agendamento })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 
@@ -46,10 +45,9 @@ export class ControladorAgendamentos {
     try {
       const agendamento = await servico.criar(request.body as any)
       return reply.status(201).send({ agendamento })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 
@@ -58,10 +56,9 @@ export class ControladorAgendamentos {
       const { id } = request.params as any
       const agendamento = await servico.atualizar(id, request.body as any)
       return reply.send({ agendamento })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 
@@ -71,10 +68,9 @@ export class ControladorAgendamentos {
       const { status } = request.body as any
       const agendamento = await servico.alterarStatus(id, status)
       return reply.send({ agendamento })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 
@@ -83,10 +79,9 @@ export class ControladorAgendamentos {
       const { id } = request.params as any
       await servico.cancelar(id)
       return reply.status(204).send()
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 }

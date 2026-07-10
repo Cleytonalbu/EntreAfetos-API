@@ -1,5 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify'
 import { ServicoPacientes } from '../services/ServicoPacientes'
+import { tratarErroPrisma } from '../lib/prismaErros'
 
 const servico = new ServicoPacientes()
 
@@ -22,10 +23,9 @@ export class ControladorPacientes {
           totalPaginas: Math.ceil(resultado.total / Number(porPagina)),
         },
       })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 
@@ -34,10 +34,9 @@ export class ControladorPacientes {
       const { id } = request.params as any
       const paciente = await servico.buscarPorId(id)
       return reply.send({ paciente })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 
@@ -45,10 +44,9 @@ export class ControladorPacientes {
     try {
       const paciente = await servico.criar(request.body as any)
       return reply.status(201).send({ paciente })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 
@@ -57,10 +55,9 @@ export class ControladorPacientes {
       const { id } = request.params as any
       const paciente = await servico.atualizar(id, request.body as any)
       return reply.send({ paciente })
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 
@@ -69,10 +66,9 @@ export class ControladorPacientes {
       const { id } = request.params as any
       await servico.inativar(id)
       return reply.status(204).send()
-    } catch (err: any) {
-      return reply.status(err.status ?? 500).send({
-        erro: 'Erro', mensagem: err.mensagem ?? 'Erro interno do servidor',
-      })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
 }
