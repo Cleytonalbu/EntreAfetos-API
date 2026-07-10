@@ -51,8 +51,8 @@ export class ControladorServicos {
   async inativar(request: FastifyRequest, reply: FastifyReply) {
     try {
       const { id } = request.params as any
-      const servicoInativado = await servico.inativar(id)
-      return reply.send({ servico: servicoInativado })
+      await servico.inativar(id)
+      return reply.status(204).send()  
     } catch (err) {
       const { status, mensagem } = tratarErroPrisma(err)
       return reply.status(status).send({ erro: 'Erro', mensagem })
