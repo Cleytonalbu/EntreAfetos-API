@@ -1,6 +1,39 @@
 # Entre Afetos API
 
-API REST da plataforma **Clínica Integrada Entre Afetos** — sistema de gestão clínica multidisciplinar voltado ao acompanhamento terapêutico de crianças.
+API REST da plataforma **Clínica Integrada Entre Afetos** — sistema de gestão clínica multidisciplinar para acompanhamento terapêutico de crianças.
+
+---
+
+## Sumário
+
+- [Stack](#stack)
+- [Arquitetura](#arquitetura)
+- [Papéis e permissões](#papéis-e-permissões)
+- [Configuração](#configuração)
+- [Convenções da API](#convenções-da-api)
+- [Endpoints](#endpoints)
+  - [Health Check](#health-check)
+  - [Autenticação](#autenticação)
+  - [Usuários](#usuários)
+  - [Pacientes](#pacientes)
+  - [Profissionais](#profissionais)
+  - [Especialidades](#especialidades)
+  - [Serviços](#serviços)
+  - [Convênios](#convênios)
+  - [Salas](#salas)
+  - [Agendamentos](#agendamentos)
+  - [Plano Terapêutico](#plano-terapêutico)
+  - [Objetivos](#objetivos)
+  - [Evoluções](#evoluções)
+  - [Encaminhamentos](#encaminhamentos)
+  - [Indicadores](#indicadores)
+  - [Relatórios](#relatórios)
+  - [Notificações](#notificações)
+  - [Mensagens](#mensagens)
+  - [Configurações](#configurações)
+- [Códigos de resposta](#códigos-de-resposta)
+- [Status dos módulos](#status-dos-módulos)
+- [Débitos técnicos](#débitos-técnicos)
 
 ---
 
@@ -11,35 +44,93 @@ API REST da plataforma **Clínica Integrada Entre Afetos** — sistema de gestã
 | Runtime | Node.js 18+ |
 | Framework | Fastify |
 | Linguagem | TypeScript |
-| ORM | Prisma |
+| ORM | Prisma 6 |
 | Banco | PostgreSQL 16 |
-| Autenticação | JWT (fastify/jwt) |
+| Autenticação | JWT (`@fastify/jwt`) |
+| Hash de senha | bcryptjs |
 | Container | Docker |
 
 ---
 
 ## Arquitetura
 
+Quatro camadas com responsabilidade única:
+
+```
+Request
+   ↓
+routes/         → define endpoint, aplica RBAC via preHandler
+   ↓
+controllers/    → valida entrada, formata resposta HTTP
+   ↓
+services/       → regras de negócio e validações de domínio
+   ↓
+repositories/   → acesso ao banco via Prisma
+   ↓
+PostgreSQL
+```
+
+### Estrutura de pastas
+
 ```
 src/
-  routes/          → define endpoints e RBAC (preHandler)
-  controllers/     → valida requisição e formata resposta
-  services/        → regras de negócio
-  repositories/    → acesso ao banco via Prisma
-  middlewares/     → autenticação e autorização
-  lib/             → cliente Prisma singleton
-  types/           → tipos globais TypeScript
+  routes/          autenticacao, pacientes, agendamentos, profissionais,
+                   auxiliares, planoTerapeutico, objetivos, evolucoes,
+                   encaminhamentos, indicadores, relatorios, notificacoes,
+                   mensagens, configuracoes
+  controllers/     um Controlador por domínio
+  services/        um Servico por domínio
+  repositories/    um Repositorio por domínio
+  middlewares/     autenticacao.ts (verificarAutenticacao + permitir)
+  lib/             prisma.ts, prismaErros.ts
+  types/           tipos globais e extensão do FastifyJWT
+  server.ts        bootstrap da aplicação
+prisma/
+  schema.prisma    20 models + 8 enums
+  migrations/
 ```
+
+### Tratamento de erros
+
+Erros do Prisma são traduzidos para HTTP em `lib/prismaErros.ts`:
+
+| Código Prisma | HTTP | Significado |
+|---------------|------|-------------|
+| P2002 | 409 | Violação de campo único |
+| P2003 | 400 | Referência inválida (FK) |
+| P2014 | 400 | Violação de relacionamento |
+| P2025 | 404 | Registro não encontrado |
+| ValidationError | 400 | Dados inválidos |
+
+Erros de negócio lançados pelos services usam o formato `{ status, mensagem }` e são repassados diretamente.
 
 ---
 
-## Papéis (RBAC)
+## Papéis e permissões
 
-| Papel | Descrição |
-|-------|-----------|
-| `GESTOR` | Acesso total à plataforma |
-| `RECEPCIONISTA` | Gerencia agendamentos e pacientes |
-| `PROFISSIONAL` | Acessa seus pacientes, evoluções e objetivos |
+| Papel | Escopo |
+|-------|--------|
+| `GESTOR` | Acesso total — configurações, indicadores, cadastros, relatórios |
+| `PROFISSIONAL` | Módulo clínico — pacientes, planos, objetivos, evoluções, encaminhamentos |
+| `RECEPCIONISTA` | Operação — agendamentos, cadastro de pacientes, mensagens |
+
+### Como o RBAC funciona
+
+```typescript
+// middlewares/autenticacao.ts
+export function permitir(...papeis: Papel[]) {
+  return async (request, reply) => {
+    if (!papeis.includes(request.user.papel)) {
+      return reply.status(403).send({ erro: 'Acesso negado', ... })
+    }
+  }
+}
+
+// routes/exemplo.ts
+app.delete('/recurso/:id', {
+  preHandler: [verificarAutenticacao, permitir('GESTOR')],
+}, controlador.remover)
+```
 
 ---
 
@@ -53,14 +144,9 @@ src/
 ### Instalação
 
 ```bash
-# Clone o repositório
-git clone https://github.com/seu-usuario/entre-afetos-api.git
+git clone <repo>
 cd entre-afetos-api
-
-# Instale as dependências
 npm install
-
-# Configure as variáveis de ambiente
 cp .env.example .env
 ```
 
@@ -68,69 +154,103 @@ cp .env.example .env
 
 ```env
 DATABASE_URL="postgresql://postgres:postgres123@localhost:5432/entre_afetos"
-JWT_SECRET="entre-afetos-secret-2026"
+JWT_SECRET="sua-chave-secreta"
 PORT=3333
 ```
 
-### Subir banco de dados
+### Subir o banco
 
 ```bash
 docker compose up -d
 ```
 
-### Rodar migrations
+### Migrations
 
 ```bash
 npx prisma migrate dev
 ```
 
-### Iniciar servidor
+### Rodar
 
 ```bash
-# Desenvolvimento
-npm run dev
+npm run dev      # desenvolvimento com hot reload
+npm run build    # compilar
+npm start        # produção
+```
 
-# Produção
-npm run build
-npm start
+### Extensão do PostgreSQL
+
+Para busca sem acentuação:
+
+```bash
+npx prisma db execute --file ./prisma/extensions.sql
+```
+
+Conteúdo do arquivo:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS unaccent;
 ```
 
 ---
 
-## Endpoints
+## Convenções da API
 
-Base URL: `http://localhost:3333`
+**Base URL:** `http://localhost:3333`
 
-> 🔒 Rotas marcadas com **[AUTH]** exigem Bearer Token no header Authorization.
-> 🔑 Rotas marcadas com **[PAPEL]** exigem papel específico além da autenticação.
+**Autenticação:** header `Authorization: Bearer <token>`
 
----
+**Notação usada abaixo:**
 
-### Health Check
+- 🔒 exige autenticação
+- 🔑 exige papel específico
 
-```
-GET /health
-```
+**Formato de erro:**
 
-**Resposta:**
 ```json
 {
-  "status": "ok",
-  "projeto": "Entre Afetos API"
+  "erro": "Erro",
+  "mensagem": "Descrição do que aconteceu"
 }
 ```
 
+**Formato de listagem paginada:**
+
+```json
+{
+  "dados": [...],
+  "meta": {
+    "total": 42,
+    "pagina": 1,
+    "porPagina": 10,
+    "totalPaginas": 5
+  }
+}
+```
+
+**Soft delete:** `DELETE` não remove fisicamente na maioria dos recursos — altera `status` ou `ativo` para inativo. Exceções: Objetivos, Notificações, Mensagens e registros de Relatório, que são removidos de fato.
+
+---
+## Endpoints
+
+### Health Check
+
+```http
+GET /health
+```
+
+Rota pública. Retorna `{ "status": "ok", "projeto": "Entre Afetos API" }`.
+
 ---
 
-## Autenticação `/auth`
+### Autenticação
 
-### Registrar usuário
+#### Registrar usuário
 
-```
+```http
 POST /auth/registro
 ```
 
-**Body:**
 ```json
 {
   "nome": "Mariana Silva",
@@ -140,37 +260,23 @@ POST /auth/registro
 }
 ```
 
-> `papel` aceita: `GESTOR`, `RECEPCIONISTA`, `PROFISSIONAL` (case insensitive)
+O campo `papel` aceita `GESTOR`, `PROFISSIONAL` ou `RECEPCIONISTA` — case insensitive. Retorna `201` com o usuário e um token JWT válido por 7 dias.
 
-**Resposta 201:**
-```json
-{
-  "usuario": {
-    "id": "uuid",
-    "nome": "Mariana Silva",
-    "email": "mariana@entreafetos.com",
-    "papel": "GESTOR",
-    "criadoEm": "2026-06-25T13:02:20.489Z"
-  },
-  "token": "eyJhbGci..."
-}
-```
+> Para cadastrar profissionais use `POST /profissionais` — essa rota cria o usuário **e** o registro de Profissional vinculado.
 
-**Erros:**
-| Status | Motivo |
-|--------|--------|
+| Erro | Motivo |
+|------|--------|
 | 400 | Campos obrigatórios ausentes ou papel inválido |
 | 409 | E-mail já cadastrado |
 
 ---
 
-### Login
+#### Login
 
-```
+```http
 POST /auth/login
 ```
 
-**Body:**
 ```json
 {
   "email": "mariana@entreafetos.com",
@@ -178,157 +284,103 @@ POST /auth/login
 }
 ```
 
-**Resposta 200:**
-```json
-{
-  "usuario": {
-    "id": "uuid",
-    "nome": "Mariana Silva",
-    "email": "mariana@entreafetos.com",
-    "papel": "GESTOR",
-    "foto": null
-  },
-  "token": "eyJhbGci..."
-}
-```
+Retorna `200` com dados do usuário e token.
 
-**Erros:**
-| Status | Motivo |
-|--------|--------|
+| Erro | Motivo |
+|------|--------|
 | 400 | Campos obrigatórios ausentes |
 | 401 | E-mail ou senha incorretos |
 | 403 | Usuário inativo |
 
 ---
 
-### Perfil do usuário logado
+#### Perfil do usuário logado
 
-```
+```http
 GET /auth/me
 ```
 
-🔒 **[AUTH]**
-
-**Resposta 200:**
-```json
-{
-  "usuario": {
-    "id": "uuid",
-    "nome": "Mariana Silva",
-    "email": "mariana@entreafetos.com",
-    "papel": "GESTOR",
-    "foto": null,
-    "ativo": true,
-    "criadoEm": "2026-06-25T13:02:20.489Z"
-  }
-}
-```
-
-**Erros:**
-| Status | Motivo |
-|--------|--------|
-| 401 | Token ausente ou inválido |
-| 404 | Usuário não encontrado |
+🔒 Retorna os dados atualizados do usuário do token. Usado pelo frontend na inicialização para montar o layout conforme o papel.
 
 ---
 
-## Pacientes `/pacientes`
+### Usuários
 
-### Listar pacientes
+Gestão de recepcionistas e gestores. Para profissionais use `/profissionais`.
 
-```
-GET /pacientes
-```
+#### Listar por papel
 
-🔒 **[AUTH]** — Todos os papéis
-
-**Query params:**
-| Param | Tipo | Descrição |
-|-------|------|-----------|
-| `busca` | string | Busca por nome, responsável ou telefone |
-| `status` | string | Filtra por status (`ativo`, `inativo`) |
-| `pagina` | number | Página atual (default: 1) |
-| `porPagina` | number | Itens por página (default: 10) |
-
-**Exemplo:**
-```
-GET /pacientes?busca=João&status=ativo&pagina=1&porPagina=10
+```http
+GET /usuarios?papel=RECEPCIONISTA&busca=ana
 ```
 
-**Resposta 200:**
+🔒 🔑 `GESTOR`
+
+O parâmetro `papel` é obrigatório. `busca` filtra por nome ou e-mail.
+
+#### Buscar por ID
+
+```http
+GET /usuarios/:id
+```
+
+🔒 🔑 `GESTOR`
+
+#### Atualizar
+
+```http
+PUT /usuarios/:id
+```
+
+🔒 🔑 `GESTOR`
+
 ```json
-{
-  "dados": [
-    {
-      "id": "uuid",
-      "nome": "João Miguel Silva",
-      "dataNascimento": "2017-03-14T00:00:00.000Z",
-      "sexo": "Masculino",
-      "foto": null,
-      "status": "ativo",
-      "responsavel": "Juliana Lima Silva",
-      "telefone": "(83) 98765-4321",
-      "diagnostico": "TEA - Nível 1 de Suporte",
-      "tags": ["TEA", "Nível 1"],
-      "criadoEm": "2026-06-25T13:26:11.207Z"
-    }
-  ],
-  "meta": {
-    "total": 1,
-    "pagina": 1,
-    "porPagina": 10,
-    "totalPaginas": 1
-  }
-}
+{ "nome": "Ana Silva", "foto": "https://..." }
 ```
+
+#### Inativar
+
+```http
+DELETE /usuarios/:id
+```
+
+🔒 🔑 `GESTOR` — retorna `204`. Define `ativo = false`.
 
 ---
 
-### Buscar paciente por ID
+### Pacientes
 
+#### Listar
+
+```http
+GET /pacientes?busca=joao&status=ativo&pagina=1&porPagina=10
 ```
+
+🔒 Todos os papéis autenticados.
+
+| Param | Descrição |
+|-------|-----------|
+| `busca` | Nome, responsável ou telefone — ignora acentuação |
+| `status` | `ativo` ou `inativo` |
+| `pagina` | Padrão 1 |
+| `porPagina` | Padrão 10 |
+
+#### Buscar por ID
+
+```http
 GET /pacientes/:id
 ```
 
-🔒 **[AUTH]** — Todos os papéis
+🔒 Retorna o paciente com os 5 últimos agendamentos e o plano terapêutico ativo.
 
-**Resposta 200:**
-```json
-{
-  "paciente": {
-    "id": "uuid",
-    "nome": "João Miguel Silva",
-    "dataNascimento": "2017-03-14T00:00:00.000Z",
-    "sexo": "Masculino",
-    "foto": null,
-    "status": "ativo",
-    "responsavel": "Juliana Lima Silva",
-    "telefone": "(83) 98765-4321",
-    "diagnostico": "TEA - Nível 1 de Suporte",
-    "tags": ["TEA", "Nível 1"],
-    "criadoEm": "2026-06-25T13:26:11.207Z",
-    "agendamentos": [...],
-    "planos": [...]
-  }
-}
-```
+#### Criar
 
-**Erros:**
-| Status | Motivo |
-|--------|--------|
-| 404 | Paciente não encontrado |
-
----
-
-### Criar paciente
-
-```
+```http
 POST /pacientes
 ```
 
-🔒 **[AUTH]** 🔑 **[RECEPCIONISTA, GESTOR]**
+🔒 🔑 `RECEPCIONISTA`, `GESTOR`
 
-**Body:**
 ```json
 {
   "nome": "João Miguel Silva",
@@ -341,328 +393,131 @@ POST /pacientes
 }
 ```
 
-**Campos obrigatórios:** `nome`, `dataNascimento`, `sexo`
+Obrigatórios: `nome`, `dataNascimento`, `sexo`.
 
-**Resposta 201:**
-```json
-{
-  "paciente": { ... }
-}
-```
+#### Atualizar
 
-**Erros:**
-| Status | Motivo |
-|--------|--------|
-| 400 | Campos obrigatórios ausentes |
-| 401 | Token ausente ou inválido |
-| 403 | Papel sem permissão |
-
----
-
-### Atualizar paciente
-
-```
+```http
 PUT /pacientes/:id
 ```
 
-🔒 **[AUTH]** 🔑 **[RECEPCIONISTA, GESTOR]**
+🔒 🔑 `RECEPCIONISTA`, `GESTOR` — todos os campos opcionais.
 
-**Body:** (todos os campos são opcionais)
-```json
-{
-  "nome": "João Miguel Silva",
-  "telefone": "(83) 99999-0000",
-  "diagnostico": "TEA - Nível 2 de Suporte"
-}
-```
+#### Inativar
 
-**Resposta 200:**
-```json
-{
-  "paciente": { ... }
-}
-```
-
-**Erros:**
-| Status | Motivo |
-|--------|--------|
-| 403 | Papel sem permissão |
-| 404 | Paciente não encontrado |
-
----
-
-### Inativar paciente
-
-```
+```http
 DELETE /pacientes/:id
 ```
 
-🔒 **[AUTH]** 🔑 **[GESTOR]**
-
-> Não remove o registro — apenas altera o status para `inativo`.
-
-**Resposta:** `204 No Content`
-
-**Erros:**
-| Status | Motivo |
-|--------|--------|
-| 403 | Papel sem permissão |
-| 404 | Paciente não encontrado |
+🔒 🔑 `GESTOR` — retorna `204`. Define `status = "inativo"`.
 
 ---
 
-## Agendamentos `/agendamentos`
+### Profissionais
 
-### Listar agendamentos
+#### Listar
 
-```
-GET /agendamentos
-```
-
-🔒 **[AUTH]** — Todos os papéis
-
-**Query params:**
-| Param | Tipo | Descrição |
-|-------|------|-----------|
-| `data` | string | Filtra por dia no formato `YYYY-MM-DD` |
-| `profissionalId` | string | Filtra por profissional |
-| `pacienteId` | string | Filtra por paciente |
-| `status` | string | Filtra por status |
-| `pagina` | number | Página atual (default: 1) |
-| `porPagina` | number | Itens por página (default: 10) |
-
-**Exemplo:**
-```
-GET /agendamentos?data=2026-07-01&profissionalId=uuid
+```http
+GET /profissionais?busca=camila&especialidadeId=uuid&ativo=true
 ```
 
-**Resposta 200:**
+🔒 Retorna profissionais com usuário e especialidades vinculadas.
+
+#### Buscar por ID
+
+```http
+GET /profissionais/:id
+```
+
+🔒
+
+#### Criar
+
+```http
+POST /profissionais
+```
+
+🔒 🔑 `GESTOR`
+
 ```json
 {
-  "dados": [
-    {
-      "id": "uuid",
-      "dataHora": "2026-07-01T09:00:00.000Z",
-      "status": "AGENDADO",
-      "observacoes": null,
-      "rascunho": false,
-      "paciente": {
-        "id": "uuid",
-        "nome": "João Miguel Silva",
-        "foto": null,
-        "diagnostico": "TEA - Nível 1",
-        "tags": ["TEA"],
-        "responsavel": "Juliana Lima Silva"
-      },
-      "profissional": {
-        "id": "uuid",
-        "usuario": { "nome": "Dra. Juliana Santos", "foto": null }
-      },
-      "servico": { "id": "uuid", "nome": "Consulta de acompanhamento", "duracaoMin": 50 },
-      "especialidade": { "id": "uuid", "nome": "Psicologia", "cor": "#6C3FC5" },
-      "convenio": { "id": "uuid", "nome": "Particular" },
-      "sala": { "id": "uuid", "nome": "Sala 1" }
-    }
-  ],
-  "meta": {
-    "total": 1,
-    "pagina": 1,
-    "porPagina": 10,
-    "totalPaginas": 1
-  }
+  "nome": "Dra. Camila Soares",
+  "email": "camila@entreafetos.com",
+  "senha": "123456",
+  "registro": "CRP-12345",
+  "bio": "Psicóloga especializada em desenvolvimento infantil",
+  "especialidadeIds": ["uuid-psicologia", "uuid-fono"]
 }
 ```
 
----
+Cria o `Usuario` com papel `PROFISSIONAL` **e** o registro `Profissional`, vinculando as especialidades. Não retorna token — o profissional obtém o dele via `POST /auth/login`.
 
-### Buscar agendamento por ID
+> ⚠️ O `id` do Profissional é diferente do `id` do Usuário. Rotas clínicas usam o `profissionalId`.
 
+#### Atualizar
+
+```http
+PUT /profissionais/:id
 ```
-GET /agendamentos/:id
-```
 
-🔒 **[AUTH]** — Todos os papéis
+🔒 🔑 `GESTOR`
 
-**Resposta 200:**
 ```json
 {
-  "agendamento": { ... }
+  "nome": "Dra. Camila Soares Silva",
+  "bio": "...",
+  "registro": "CRP-12345-SP",
+  "especialidadeIds": ["uuid"]
 }
 ```
 
-**Erros:**
-| Status | Motivo |
-|--------|--------|
-| 404 | Agendamento não encontrado |
+Passar `especialidadeIds` substitui todos os vínculos existentes.
 
----
+#### Inativar
 
-### Criar agendamento
-
-```
-POST /agendamentos
+```http
+DELETE /profissionais/:id
 ```
 
-🔒 **[AUTH]** 🔑 **[RECEPCIONISTA, GESTOR]**
+🔒 🔑 `GESTOR` — retorna `204`. Define `ativo = false` no usuário vinculado.
 
-**Body:**
+#### Horários disponíveis
+
+```http
+GET /profissionais/:id/horarios-disponiveis?data=2026-07-15
+```
+
+🔒 Retorna slots de 30 em 30 minutos entre 08:00 e 18:30, marcando cada um como disponível ou ocupado com base nos agendamentos do dia e na duração de cada serviço.
+
 ```json
 {
-  "pacienteId": "uuid",
-  "profissionalId": "uuid",
-  "servicoId": "uuid",
-  "especialidadeId": "uuid",
-  "convenioId": "uuid",
-  "salaId": "uuid",
-  "dataHora": "2026-07-01T09:00:00",
-  "observacoes": "Primeira consulta",
-  "rascunho": false
-}
-```
-
-**Campos obrigatórios:** `pacienteId`, `profissionalId`, `servicoId`, `dataHora`
-
-> ⚠️ Verifica automaticamente conflito de horário do profissional.
-
-**Resposta 201:**
-```json
-{
-  "agendamento": { ... }
-}
-```
-
-**Erros:**
-| Status | Motivo |
-|--------|--------|
-| 400 | Campos obrigatórios ausentes |
-| 404 | Serviço não encontrado |
-| 409 | Conflito de horário do profissional |
-
----
-
-### Atualizar agendamento
-
-```
-PUT /agendamentos/:id
-```
-
-🔒 **[AUTH]** 🔑 **[RECEPCIONISTA, GESTOR]**
-
-**Body:** (todos os campos são opcionais)
-```json
-{
-  "salaId": "uuid",
-  "convenioId": "uuid",
-  "observacoes": "Atualização de observação"
-}
-```
-
-**Resposta 200:**
-```json
-{
-  "agendamento": { ... }
-}
-```
-
----
-
-### Alterar status do agendamento
-
-```
-PATCH /agendamentos/:id/status
-```
-
-🔒 **[AUTH]** — Todos os papéis
-
-**Body:**
-```json
-{
-  "status": "AGUARDANDO"
-}
-```
-
-**Valores aceitos:**
-| Status | Descrição |
-|--------|-----------|
-| `AGENDADO` | Agendamento confirmado |
-| `AGUARDANDO` | Paciente chegou, aguardando atendimento |
-| `EM_ATENDIMENTO` | Sessão em andamento |
-| `CONCLUIDO` | Sessão finalizada |
-| `CANCELADO` | Agendamento cancelado |
-
-**Resposta 200:**
-```json
-{
-  "agendamento": { ... }
-}
-```
-
-**Erros:**
-| Status | Motivo |
-|--------|--------|
-| 400 | Status inválido |
-| 404 | Agendamento não encontrado |
-
----
-
-### Cancelar agendamento
-
-```
-DELETE /agendamentos/:id
-```
-
-🔒 **[AUTH]** 🔑 **[RECEPCIONISTA, GESTOR]**
-
-> Não remove o registro — altera o status para `CANCELADO`.
-
-**Resposta:** `204 No Content`
-
-**Erros:**
-| Status | Motivo |
-|--------|--------|
-| 403 | Papel sem permissão |
-| 404 | Agendamento não encontrado |
-
----
-
-## Especialidades `/especialidades`
-
-### Listar especialidades
-
-```
-GET /especialidades
-```
-
-🔒 **[AUTH]** — Todos os papéis
-
-**Resposta 200:**
-```json
-{
-  "dados": [
-    {
-      "id": "uuid",
-      "nome": "Psicologia",
-      "descricao": "Avaliação e acompanhamento psicológico",
-      "cor": "#6C3FC5",
-      "categoria": "saude_mental",
-      "icone": null,
-      "ativo": true
-    }
+  "slots": [
+    { "horario": "08:00", "disponivel": true,  "dataHora": "2026-07-15T08:00:00.000Z" },
+    { "horario": "09:00", "disponivel": false, "dataHora": "2026-07-15T09:00:00.000Z" }
   ]
 }
 ```
 
+| Erro | Motivo |
+|------|--------|
+| 400 | `data` não informada |
+| 404 | Profissional não encontrado |
+
 ---
 
-### Criar especialidade
+### Especialidades
 
+```http
+GET    /especialidades              🔒
+GET    /especialidades/:id          🔒
+POST   /especialidades              🔒 🔑 GESTOR
+PUT    /especialidades/:id          🔒 🔑 GESTOR
+PATCH  /especialidades/:id/status   🔒 🔑 GESTOR
+DELETE /especialidades/:id          🔒 🔑 GESTOR
 ```
-POST /especialidades
-```
 
-🔒 **[AUTH]** 🔑 **[GESTOR]**
+Criação:
 
-**Body:**
 ```json
 {
   "nome": "Psicologia",
@@ -673,102 +528,22 @@ POST /especialidades
 }
 ```
 
-**Campos obrigatórios:** `nome`, `categoria`
+Obrigatórios: `nome`, `categoria`. O campo `nome` é único — duplicatas retornam `409`.
 
-**Resposta 201:**
-```json
-{
-  "especialidade": { ... }
-}
-```
+Alterar status: `{ "ativo": false }`. O `DELETE` faz o mesmo, retornando `204`.
 
 ---
 
-### Atualizar especialidade
+### Serviços
 
-```
-PUT /especialidades/:id
-```
-
-🔒 **[AUTH]** 🔑 **[GESTOR]**
-
-**Body:** (todos os campos são opcionais)
-```json
-{
-  "descricao": "Nova descrição",
-  "cor": "#4B2A8A"
-}
+```http
+GET    /servicos          🔒
+GET    /servicos/:id      🔒
+POST   /servicos          🔒 🔑 GESTOR
+PUT    /servicos/:id      🔒 🔑 GESTOR
+DELETE /servicos/:id      🔒 🔑 GESTOR
 ```
 
-**Resposta 200:**
-```json
-{
-  "especialidade": { ... }
-}
-```
-
----
-
-### Ativar / Desativar especialidade
-
-```
-PATCH /especialidades/:id/status
-```
-
-🔒 **[AUTH]** 🔑 **[GESTOR]**
-
-**Body:**
-```json
-{
-  "ativo": false
-}
-```
-
-**Resposta 200:**
-```json
-{
-  "especialidade": { ... }
-}
-```
-
----
-
-## Serviços `/servicos`
-
-### Listar serviços
-
-```
-GET /servicos
-```
-
-🔒 **[AUTH]** — Todos os papéis
-
-**Resposta 200:**
-```json
-{
-  "dados": [
-    {
-      "id": "uuid",
-      "nome": "Consulta de acompanhamento",
-      "duracaoMin": 50,
-      "descricao": "Consulta voltada para acompanhamento terapêutico",
-      "ativo": true
-    }
-  ]
-}
-```
-
----
-
-### Criar serviço
-
-```
-POST /servicos
-```
-
-🔒 **[AUTH]** 🔑 **[GESTOR]**
-
-**Body:**
 ```json
 {
   "nome": "Consulta de acompanhamento",
@@ -777,179 +552,979 @@ POST /servicos
 }
 ```
 
-**Campos obrigatórios:** `nome`, `duracaoMin`
-
-**Resposta 201:**
-```json
-{
-  "servico": { ... }
-}
-```
+Obrigatórios: `nome`, `duracaoMin`. A duração é usada no cálculo de conflito de horário dos agendamentos.
 
 ---
 
-### Atualizar serviço
+### Convênios
 
-```
-PUT /servicos/:id
-```
-
-🔒 **[AUTH]** 🔑 **[GESTOR]**
-
-**Body:** (todos os campos são opcionais)
-```json
-{
-  "duracaoMin": 60
-}
+```http
+GET    /convenios        🔒
+GET    /convenios/:id    🔒
+POST   /convenios        🔒 🔑 GESTOR
+PUT    /convenios/:id    🔒 🔑 GESTOR
+DELETE /convenios/:id    🔒 🔑 GESTOR
 ```
 
-**Resposta 200:**
-```json
-{
-  "servico": { ... }
-}
-```
+Body: `{ "nome": "Particular" }`
 
 ---
 
-## Convênios `/convenios`
+### Salas
 
-### Listar convênios
-
+```http
+GET    /salas        🔒
+GET    /salas/:id    🔒
+POST   /salas        🔒 🔑 GESTOR
+PUT    /salas/:id    🔒 🔑 GESTOR
+DELETE /salas/:id    🔒 🔑 GESTOR
 ```
-GET /convenios
+
+```json
+{ "nome": "Sala 1", "descricao": "Sala de atendimento individual" }
 ```
 
-🔒 **[AUTH]** — Todos os papéis
+---
+### Agendamentos
 
-**Resposta 200:**
+#### Listar
+
+```http
+GET /agendamentos?data=2026-07-10&profissionalId=uuid&status=AGENDADO&pagina=1
+```
+
+🔒 Filtros: `data` (dia específico, `YYYY-MM-DD`), `profissionalId`, `pacienteId`, `status`, paginação.
+
+Retorna cada agendamento com paciente, profissional, serviço, especialidade, convênio e sala.
+
+#### Buscar por ID
+
+```http
+GET /agendamentos/:id
+```
+
+🔒
+
+#### Criar
+
+```http
+POST /agendamentos
+```
+
+🔒 🔑 `RECEPCIONISTA`, `GESTOR`
+
 ```json
 {
-  "dados": [
+  "pacienteId": "uuid",
+  "profissionalId": "uuid",
+  "servicoId": "uuid",
+  "especialidadeId": "uuid",
+  "convenioId": "uuid",
+  "salaId": "uuid",
+  "dataHora": "2026-07-10T09:00:00",
+  "observacoes": "Primeira consulta",
+  "rascunho": false
+}
+```
+
+Obrigatórios: `pacienteId`, `profissionalId`, `servicoId`, `dataHora`.
+
+**Verificação de conflito:** antes de criar, o sistema calcula o intervalo do agendamento usando a `duracaoMin` do serviço e verifica se o profissional já tem compromisso sobreposto. Agendamentos cancelados são ignorados.
+
+| Erro | Motivo |
+|------|--------|
+| 400 | Campos obrigatórios ausentes |
+| 404 | Serviço não encontrado |
+| 409 | Profissional já tem agendamento no horário |
+
+#### Atualizar
+
+```http
+PUT /agendamentos/:id
+```
+
+🔒 🔑 `RECEPCIONISTA`, `GESTOR`
+
+#### Alterar status
+
+```http
+PATCH /agendamentos/:id/status
+```
+
+🔒 Todos os papéis — a recepção marca chegada, o profissional marca atendimento.
+
+```json
+{ "status": "AGUARDANDO" }
+```
+
+| Status | Quando |
+|--------|--------|
+| `AGENDADO` | Estado inicial |
+| `AGUARDANDO` | Paciente chegou na clínica |
+| `EM_ATENDIMENTO` | Sessão em andamento |
+| `CONCLUIDO` | Sessão finalizada |
+| `CANCELADO` | Cancelado ou falta |
+
+#### Cancelar
+
+```http
+DELETE /agendamentos/:id
+```
+
+🔒 🔑 `RECEPCIONISTA`, `GESTOR` — retorna `204`. Define `status = CANCELADO`.
+
+---
+
+### Plano Terapêutico
+
+#### Plano ativo do paciente
+
+```http
+GET /pacientes/:id/plano-terapeutico
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+Retorna o plano com status `ATIVO`, incluindo paciente, profissional responsável e objetivos vinculados. Retorna `404` se o paciente não tiver plano ativo.
+
+#### Histórico de planos
+
+```http
+GET /pacientes/:id/plano-terapeutico/historico
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR` — todos os planos do paciente, do mais recente ao mais antigo, com contagem de objetivos.
+
+#### Criar plano
+
+```http
+POST /pacientes/:id/plano-terapeutico
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+```json
+{
+  "profissionalId": "uuid",
+  "dataAvaliacao": "2026-02-10",
+  "dataInicio": "2026-02-10",
+  "dataProximaRevisao": "2026-08-10",
+  "versao": "1.0",
+  "especialidadePrincipal": "Psicologia",
+  "outrasEspecialidades": ["Fonoaudiologia", "Terapia Ocupacional"],
+  "localAtendimento": "Clínica Entre Afetos",
+  "queixasPrincipais": "Dificuldades na comunicação funcional",
+  "necessidadesIdentificadas": "Desenvolvimento da comunicação e regulação emocional",
+  "objetivoGeral": "Promover o desenvolvimento global da criança",
+  "estrategiasTerapeuticas": "Intervenções baseadas em ABA, TEACCH e ESDM",
+  "observacoes": "Plano elaborado com base na avaliação inicial",
+  "frequenciaSemanal": 3,
+  "duracaoSessaoMin": 50,
+  "totalMensalSessoes": 12
+}
+```
+
+Obrigatórios: `profissionalId`, `dataAvaliacao`, `dataInicio`, `dataProximaRevisao`, `especialidadePrincipal`.
+
+> ⚠️ Criar um novo plano **encerra automaticamente** o plano ativo anterior do paciente (`status = ENCERRADO`).
+
+#### Buscar por ID
+
+```http
+GET /planos-terapeuticos/:id
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+#### Atualizar
+
+```http
+PUT /planos-terapeuticos/:id
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+#### Alterar status
+
+```http
+PATCH /planos-terapeuticos/:id/status
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+```json
+{ "status": "EM_REVISAO" }
+```
+
+Valores: `ATIVO`, `EM_REVISAO`, `PAUSADO`, `ENCERRADO`.
+
+---
+
+### Objetivos
+
+#### Listar objetivos do paciente
+
+```http
+GET /pacientes/:id/objetivos?categoria=comunicacao&status=EM_ANDAMENTO&planoId=uuid
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+#### Criar
+
+```http
+POST /pacientes/:id/objetivos
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+```json
+{
+  "profissionalId": "uuid",
+  "planoId": "uuid",
+  "nome": "Ampliar comunicação funcional",
+  "descricao": "Utilizar frases de 3 a 4 palavras para expressar necessidades",
+  "categoria": "comunicacao",
+  "progresso": 0,
+  "nivelDesempenho": 3
+}
+```
+
+Obrigatórios: `profissionalId`, `nome`, `categoria`. O `progresso` vai de 0 a 100, o `nivelDesempenho` de 1 a 5.
+
+#### Buscar por ID
+
+```http
+GET /objetivos/:id
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR` — inclui paciente, profissional, plano e as 5 últimas sessões em que o objetivo foi trabalhado.
+
+#### Atualizar
+
+```http
+PUT /objetivos/:id
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+#### Alterar status
+
+```http
+PATCH /objetivos/:id/status
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+```json
+{ "status": "ALCANCADO" }
+```
+
+Valores: `EM_ANDAMENTO`, `ALCANCADO`, `PARCIALMENTE_ALCANCADO`, `NAO_TRABALHADO`.
+
+> Marcar como `ALCANCADO` define automaticamente `progresso = 100` e `nivelDesempenho = 5`.
+
+#### Atualizar progresso
+
+```http
+PATCH /objetivos/:id/progresso
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+```json
+{ "progresso": 70, "nivelDesempenho": 4 }
+```
+
+> Definir `progresso = 100` marca o objetivo como `ALCANCADO` automaticamente.
+
+| Erro | Motivo |
+|------|--------|
+| 400 | `progresso` fora de 0–100 ou `nivelDesempenho` fora de 1–5 |
+
+#### Remover
+
+```http
+DELETE /objetivos/:id
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR` — retorna `204`. Remove fisicamente do banco.
+
+---
+
+### Evoluções
+
+Registro clínico das sessões realizadas.
+
+#### Listar evoluções do paciente
+
+```http
+GET /pacientes/:id/evolucoes?profissionalId=uuid&dataInicio=2026-07-01&dataFim=2026-07-31&rascunho=false
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+#### Criar
+
+```http
+POST /evolucoes
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+```json
+{
+  "pacienteId": "uuid",
+  "profissionalId": "uuid",
+  "agendamentoId": "uuid",
+  "dataAtendimento": "2026-07-11",
+  "horaInicio": "09:00",
+  "horaFim": "09:50",
+  "especialidade": "Psicologia",
+  "tipoAtendimento": "individual",
+  "localAtendimento": "Clínica Entre Afetos",
+  "evolucaoEscrita": "João esteve participativo durante a sessão...",
+  "resultadoGeral": "dentro_esperado",
+  "impactos": ["comunicacao", "interacao_social", "atencao"],
+  "observacoes": "Boa receptividade às atividades propostas",
+  "rascunho": true,
+  "objetivosSessao": [
     {
-      "id": "uuid",
-      "nome": "Particular",
-      "ativo": true
+      "objetivoId": "uuid",
+      "statusNaSessao": "Em evolução",
+      "nivelDesempenho": 4
     }
   ]
 }
 ```
 
+Obrigatórios: `pacienteId`, `profissionalId`, `dataAtendimento`, `horaInicio`, `horaFim`, `especialidade`, `tipoAtendimento`.
+
+| Campo | Valores aceitos |
+|-------|-----------------|
+| `tipoAtendimento` | `individual`, `grupo`, `domiciliar`, `teleconsulta` |
+| `resultadoGeral` | `abaixo_esperado`, `dentro_esperado`, `acima_esperado` |
+
+O array `objetivosSessao` cria os vínculos na tabela pivô `ObjetivoSessao` e atualiza o `nivelDesempenho` de cada objetivo trabalhado.
+
+#### Buscar por ID
+
+```http
+GET /evolucoes/:id
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR` — inclui paciente, profissional, agendamento, objetivos da sessão, anexos e encaminhamentos gerados.
+
+#### Atualizar
+
+```http
+PUT /evolucoes/:id
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+> Só funciona enquanto `rascunho = true`. Evoluções assinadas retornam `400`.
+
+#### Assinar
+
+```http
+POST /evolucoes/:id/assinar
+```
+
+🔒 🔑 `PROFISSIONAL`
+
+Define `rascunho = false` e registra `assinadoEm`. A partir daí a evolução fica imutável.
+
+| Erro | Motivo |
+|------|--------|
+| 400 | Já assinada, ou `evolucaoEscrita` vazia |
+| 403 | Usuário não é o profissional responsável pela evolução |
+| 404 | Evolução não encontrada |
+
+#### Remover
+
+```http
+DELETE /evolucoes/:id
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR` — retorna `204`. Só remove rascunhos; evoluções assinadas retornam `400`.
+
 ---
 
-### Criar convênio
+### Encaminhamentos
 
+#### Listar
+
+```http
+GET /encaminhamentos?pacienteId=uuid&status=PENDENTE&prioridade=ALTA&dataInicio=2026-07-01
 ```
-POST /convenios
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+Filtros: `pacienteId`, `profissionalOrigemId`, `especialidadeId`, `status`, `prioridade`, `dataInicio`, `dataFim`.
+
+#### Buscar por ID
+
+```http
+GET /encaminhamentos/:id
 ```
 
-🔒 **[AUTH]** 🔑 **[GESTOR]**
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
 
-**Body:**
+#### Criar
+
+```http
+POST /encaminhamentos
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
 ```json
 {
-  "nome": "Particular"
+  "pacienteId": "uuid",
+  "profissionalOrigemId": "uuid",
+  "profissionalDestinoId": "uuid",
+  "evolucaoId": "uuid",
+  "especialidadeId": "uuid",
+  "motivo": "Necessidade de avaliação da comunicação funcional",
+  "observacoes": "Paciente mantém dificuldades expressivas",
+  "prioridade": "ALTA"
 }
 ```
 
-**Resposta 201:**
-```json
-{
-  "convenio": { ... }
-}
+Obrigatórios: `pacienteId`, `profissionalOrigemId`, `motivo`.
+
+Prioridades: `BAIXA`, `MEDIA` (padrão), `ALTA`, `URGENTE`.
+
+#### Alterar status
+
+```http
+PATCH /encaminhamentos/:id/status
 ```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+```json
+{ "status": "ACEITO" }
+```
+
+Fluxo: `PENDENTE` → `ACEITO` → `EM_ATENDIMENTO` → `CONCLUIDO`.
+
+> Encaminhamentos com status `CONCLUIDO` ou `CANCELADO` não podem mais ter o status alterado.
+
+#### Cancelar
+
+```http
+DELETE /encaminhamentos/:id
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR` — retorna `204`. Define `status = CANCELADO`. Não é possível cancelar um encaminhamento já concluído.
 
 ---
+### Indicadores
 
-## Salas `/salas`
+Agregações para os dashboards. Todas as rotas aceitam `dataInicio` e `dataFim` (`YYYY-MM-DD`); quando omitidos, o período padrão é dos últimos 6 meses até hoje.
 
-### Listar salas
+#### Painel geral da clínica
 
+```http
+GET /indicadores?dataInicio=2026-01-01&dataFim=2026-12-31
 ```
-GET /salas
-```
 
-🔒 **[AUTH]** — Todos os papéis
+🔒 🔑 `GESTOR`
 
-**Resposta 200:**
 ```json
 {
-  "dados": [
-    {
-      "id": "uuid",
-      "nome": "Sala 1",
-      "descricao": "Sala de atendimento individual",
-      "ativa": true
-    }
+  "periodo": { "dataInicio": "...", "dataFim": "..." },
+  "contadores": {
+    "criancasCadastradas": 156,
+    "profissionaisAtivos": 18,
+    "objetivosAtivos": 842,
+    "objetivosAlcancados": 324,
+    "objetivosEmEvolucao": 472,
+    "faltasRegistradas": 18
+  },
+  "criancasPorEspecialidade": [
+    { "especialidadeId": "uuid", "nome": "Psicologia", "cor": "#6C3FC5", "total": 82 }
+  ],
+  "criancasPorProfissional": [
+    { "profissionalId": "uuid", "nome": "Dra. Juliana", "foto": null, "total": 32 }
+  ],
+  "comparecimento": {
+    "comparecimentos": 582,
+    "faltas": 18,
+    "agendados": 25,
+    "emAtendimento": 3,
+    "total": 628,
+    "taxaComparecimento": 91
+  },
+  "resumoObjetivos": {
+    "total": 842,
+    "porStatus": [
+      { "status": "ALCANCADO", "total": 324, "percentual": 38 }
+    ]
+  },
+  "evolucaoPorEspecialidade": [
+    { "categoria": "comunicacao", "mediaEvolucao": 75, "totalObjetivos": 224 }
+  ],
+  "evolucaoPorPeriodo": [
+    { "mes": "2026-01", "sessoes": 98, "mediaDesempenho": 42 }
   ]
 }
 ```
 
+#### Indicadores de objetivos
+
+```http
+GET /indicadores/objetivos
+```
+
+🔒 🔑 `GESTOR` — total e distribuição por status com percentuais.
+
+#### Indicadores de frequência
+
+```http
+GET /indicadores/frequencia?dataInicio=2026-01-01&dataFim=2026-12-31
+```
+
+🔒 🔑 `GESTOR` — comparecimentos, faltas e taxa de comparecimento.
+
+#### Alertas de gestão
+
+```http
+GET /indicadores/alertas
+```
+
+🔒 🔑 `GESTOR`
+
+```json
+{
+  "criancasSemAtendimento": {
+    "total": 12,
+    "detalhes": [
+      { "id": "uuid", "nome": "João Miguel", "ultimoAtendimento": "2026-06-20T..." }
+    ]
+  },
+  "objetivosDesatualizados": { "total": 28 },
+  "profissionaisOciosos": {
+    "total": 4,
+    "detalhes": [
+      { "id": "uuid", "nome": "Dr. Rafael", "agendamentosProximos": 2 }
+    ]
+  }
+}
+```
+
+Regras dos alertas:
+
+| Alerta | Critério |
+|--------|----------|
+| Crianças sem atendimento | Último atendimento concluído há mais de 15 dias |
+| Objetivos desatualizados | `atualizadoEm` há mais de 30 dias, com status em andamento |
+| Profissionais ociosos | Menos de 5 agendamentos nos próximos 7 dias |
+
+#### Indicadores de um paciente
+
+```http
+GET /pacientes/:id/indicadores?dataInicio=2026-01-01&dataFim=2026-12-31
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+Alimenta a tela de Gráficos do paciente:
+
+```json
+{
+  "evolucaoGeral": 72,
+  "desempenhoPorCategoria": [
+    { "categoria": "comunicacao", "media": 75, "totalObjetivos": 5 }
+  ],
+  "objetivos": {
+    "total": 12,
+    "porStatus": { "EM_ANDAMENTO": 7, "ALCANCADO": 3 },
+    "lista": [...]
+  },
+  "frequencia": {
+    "totalSessoes": 20,
+    "concluidos": 18,
+    "cancelados": 2,
+    "taxaComparecimento": 90
+  },
+  "evolucoes": {
+    "total": 18,
+    "historico": [
+      { "id": "uuid", "data": "...", "resultadoGeral": "dentro_esperado", "objetivosTrabalhados": 5 }
+    ]
+  }
+}
+```
+
 ---
 
-### Criar sala
+### Relatórios
 
+A API retorna os **dados** em JSON — a renderização e exportação para PDF/Excel ficam a cargo do frontend.
+
+#### Tipos disponíveis
+
+```http
+GET /relatorios/tipos
 ```
-POST /salas
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+| Tipo | Descrição | Requer paciente |
+|------|-----------|-----------------|
+| `individual` | Perfil completo da criança | Sim |
+| `por_especialidade` | Panorama por especialidade | Não |
+| `por_profissional` | Desempenho dos profissionais | Não |
+| `objetivos` | Acompanhamento de objetivos | Não |
+| `evolucao_clinica` | Evolução ao longo do tempo | Não |
+| `frequencia` | Presenças, faltas e cancelamentos | Não |
+
+#### Gerar relatório
+
+```http
+POST /relatorios/gerar
 ```
 
-🔒 **[AUTH]** 🔑 **[GESTOR]**
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
 
-**Body:**
 ```json
 {
-  "nome": "Sala 1",
-  "descricao": "Sala de atendimento individual"
+  "tipo": "individual",
+  "pacienteId": "uuid",
+  "dataInicio": "2026-01-01",
+  "dataFim": "2026-12-31"
 }
 ```
 
-**Resposta 201:**
+Filtros aceitos por tipo:
+
+| Tipo | Filtros opcionais |
+|------|-------------------|
+| `individual` | — (`pacienteId` obrigatório) |
+| `por_especialidade` | `especialidadeId` |
+| `por_profissional` | `profissionalId` |
+| `objetivos` | `pacienteId`, `profissionalId`, `categoria`, `status` |
+| `evolucao_clinica` | `pacienteId`, `especialidade` |
+| `frequencia` | `pacienteId`, `profissionalId` |
+
+Resposta:
+
 ```json
 {
-  "sala": { ... }
+  "tipo": "individual",
+  "periodo": { "dataInicio": "...", "dataFim": "..." },
+  "dados": { ... }
 }
 ```
+
+#### Registrar exportação
+
+```http
+POST /relatorios
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+Grava no histórico que um relatório foi exportado. Chamado pelo frontend quando o usuário baixa o PDF ou Excel.
+
+```json
+{
+  "profissionalId": "uuid",
+  "pacienteId": "uuid",
+  "tipo": "individual",
+  "formato": "PDF",
+  "dataInicio": "2026-01-01",
+  "dataFim": "2026-12-31"
+}
+```
+
+#### Histórico
+
+```http
+GET /relatorios?tipo=individual&profissionalId=uuid&pacienteId=uuid
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR`
+
+#### Remover do histórico
+
+```http
+DELETE /relatorios/:id
+```
+
+🔒 🔑 `GESTOR` — retorna `204`.
+
+---
+
+### Notificações
+
+Notificações são sempre do usuário autenticado — o `usuarioId` vem do token.
+
+#### Listar
+
+```http
+GET /notificacoes?lida=false&tipo=novo_agendamento
+```
+
+🔒
+
+```json
+{
+  "notificacoes": [...],
+  "totalNaoLidas": 3
+}
+```
+
+#### Criar
+
+```http
+POST /notificacoes
+```
+
+🔒
+
+```json
+{
+  "usuarioId": "uuid",
+  "tipo": "novo_agendamento",
+  "texto": "Novo agendamento criado para João Miguel amanhã às 09:00"
+}
+```
+
+Tipos aceitos: `lembrete_consulta`, `confirmacao_consulta`, `faltas_ausencias`, `novos_objetivos`, `relatorios_prontos`, `novo_agendamento`, `pagamento_recebido`, `encaminhamento`, `geral`.
+
+#### Marcar como lida
+
+```http
+PATCH /notificacoes/:id/lida
+```
+
+🔒 Só o dono da notificação — outros retornam `403`.
+
+#### Marcar todas como lidas
+
+```http
+PATCH /notificacoes/todas/lidas
+```
+
+🔒 Retorna `204`.
+
+#### Remover
+
+```http
+DELETE /notificacoes/:id
+```
+
+🔒 Só o dono. Retorna `204`.
+
+#### Remover todas
+
+```http
+DELETE /notificacoes
+```
+
+🔒 Retorna `204`.
+
+---
+
+### Mensagens
+
+Comunicação interna da clínica. O remetente vem do token.
+
+```http
+GET    /mensagens             🔒
+GET    /mensagens/:id         🔒
+POST   /mensagens             🔒
+PATCH  /mensagens/:id/lida    🔒
+DELETE /mensagens/:id         🔒
+```
+
+Criação:
+
+```json
+{ "texto": "Reunião de alinhamento hoje às 14h na sala 1." }
+```
+
+Limite de 1000 caracteres. Só o remetente pode marcar como lida ou remover.
+
+> ⚠️ Ver [Débitos técnicos](#débitos-técnicos) — o modelo atual não tem destinatário.
+
+---
+
+### Configurações
+
+#### Dados da clínica
+
+```http
+GET /clinica
+```
+
+🔒 Todos os papéis podem ler.
+
+```http
+POST /clinica
+```
+
+🔒 🔑 `GESTOR`
+
+```json
+{
+  "nome": "Clínica Integrada Entre Afetos",
+  "cnpj": "35.123.456/0001-00",
+  "email": "contato@entreafetos.com.br",
+  "telefone": "(83) 98765-4321",
+  "endereco": "Rua das Flores, 123",
+  "cidade": "Guarabira",
+  "estado": "PB",
+  "cep": "58200-000"
+}
+```
+
+Obrigatórios: `nome`, `cnpj`, `email`. O sistema é single-tenant — só existe uma clínica. Tentar criar uma segunda retorna `409`.
+
+```http
+PUT /clinica
+```
+
+🔒 🔑 `GESTOR`
+
+#### Configurações gerais
+
+```http
+PUT /clinica/configuracoes
+```
+
+🔒 🔑 `GESTOR`
+
+```json
+{
+  "ativarLembretes": true,
+  "permitirReagendamento": true,
+  "exigirJustificativaFaltas": true,
+  "bloquearProntuario": false,
+  "exibirFinanceiroParaProfissional": false
+}
+```
+
+#### Configurações de notificação
+
+```http
+GET /clinica/notificacoes-config
+PUT /clinica/notificacoes-config
+```
+
+🔒 🔑 `GESTOR`
+
+```json
+{
+  "tipo": "lembrete_consulta",
+  "canais": ["email", "whatsapp", "app"]
+}
+```
+
+Tipos: `lembrete_consulta`, `confirmacao_consulta`, `faltas_ausencias`, `novos_objetivos`, `relatorios_prontos`.
+Canais: `email`, `whatsapp`, `app`.
+
+O `PUT` faz upsert — cria se não existir, atualiza se já existir.
+
+#### Modelos de evolução
+
+Templates customizáveis por especialidade.
+
+```http
+GET    /modelos-evolucao?especialidade=Psicologia   🔒
+GET    /modelos-evolucao/:id                        🔒
+POST   /modelos-evolucao                            🔒 🔑 GESTOR
+PUT    /modelos-evolucao/:id                        🔒 🔑 GESTOR
+DELETE /modelos-evolucao/:id                        🔒 🔑 GESTOR
+```
+
+```json
+{
+  "nome": "Modelo Padrão - Psicologia",
+  "especialidade": "Psicologia",
+  "campos": {
+    "secoes": [
+      { "titulo": "Comportamento observado", "tipo": "texto" },
+      { "titulo": "Interação social", "tipo": "escala", "min": 1, "max": 5 },
+      { "titulo": "Estratégias", "tipo": "multiselect", "opcoes": ["ABA", "TEACCH"] }
+    ]
+  }
+}
+```
+
+O campo `campos` é JSON livre — o frontend interpreta a estrutura para renderizar o formulário.
 
 ---
 
 ## Códigos de resposta
 
-| Código | Descrição |
-|--------|-----------|
-| 200 | Sucesso |
-| 201 | Criado com sucesso |
-| 204 | Sem conteúdo (sucesso sem retorno) |
-| 400 | Dados inválidos ou ausentes |
-| 401 | Não autenticado (token ausente ou inválido) |
-| 403 | Sem permissão (papel insuficiente) |
+| Código | Uso |
+|--------|-----|
+| 200 | Sucesso com corpo |
+| 201 | Recurso criado |
+| 204 | Sucesso sem corpo (deletes e ações em lote) |
+| 400 | Dados inválidos, ausentes ou regra de negócio violada |
+| 401 | Token ausente, inválido ou expirado |
+| 403 | Papel sem permissão para o recurso |
 | 404 | Recurso não encontrado |
-| 409 | Conflito (e-mail duplicado, horário ocupado) |
-| 500 | Erro interno do servidor |
+| 409 | Conflito — duplicidade ou horário ocupado |
+| 500 | Erro interno |
 
 ---
 
-## Módulos previstos (em desenvolvimento)
+## Status dos módulos
 
-| Módulo | Status |
-|--------|--------|
-| Autenticação | ✅ Concluído |
-| Pacientes | ✅ Concluído |
-| Agendamentos | ✅ Concluído |
-| Especialidades | ✅ Concluído |
-| Serviços | ✅ Concluído |
-| Convênios | ✅ Concluído |
-| Salas | ✅ Concluído |
-| Profissionais | 🔄 Em desenvolvimento |
-| Plano Terapêutico | 🔜 Previsto |
-| Objetivos | 🔜 Previsto |
-| Evoluções | 🔜 Previsto |
-| Encaminhamentos | 🔜 Previsto |
-| Gráficos / Indicadores | 🔜 Previsto |
-| Relatórios | 🔜 Previsto |
-| Financeiro | 🔜 Previsto |
-| Notificações | 🔜 Previsto |
-| Mensagens | 🔜 Previsto |
-| Configurações | 🔜 Previsto |
+| Módulo | Rotas | Status |
+|--------|-------|--------|
+| Autenticação | 3 | ✅ |
+| Usuários | 4 | ✅ |
+| Pacientes | 5 | ✅ |
+| Profissionais | 6 | ✅ |
+| Especialidades | 6 | ✅ |
+| Serviços | 5 | ✅ |
+| Convênios | 5 | ✅ |
+| Salas | 5 | ✅ |
+| Agendamentos | 6 | ✅ |
+| Plano Terapêutico | 6 | ✅ |
+| Objetivos | 7 | ✅ |
+| Evoluções | 6 | ✅ |
+| Encaminhamentos | 5 | ✅ |
+| Indicadores | 5 | ✅ |
+| Relatórios | 5 | ✅ |
+| Notificações | 6 | ✅ |
+| Mensagens | 5 | ✅ |
+| Configurações | 10 | ✅ |
+| **Financeiro** | — | ⏭️ Não implementado |
+
+Total: **18 módulos**, **~100 rotas**.
+
+---
+
+## Débitos técnicos
+
+Pontos conhecidos a resolver conforme o projeto evolui:
+
+**Mensagens sem destinatário**
+O model `Mensagem` só tem `remetenteId`. O campo `lida` não faz sentido sem alguém que receba. Refatorar para incluir `destinatarioId` e transformar em chat interno de fato, ou considerar integração com WhatsApp para comunicação com responsáveis.
+
+**Upload de anexos**
+O model `Anexo` existe e as evoluções já retornam o array, mas não há rota de upload implementada. Falta definir o storage (S3 ou similar) e criar `POST /evolucoes/:id/anexos`.
+
+**Módulo Financeiro**
+Models `Transacao` e enums já estão no schema. Faltam repositório, service, controller e rotas.
+
+**Portal do responsável**
+As telas mapeadas não incluem login para pais/responsáveis. Se for necessário, exige um quarto papel e revisão do RBAC.
+
+**Paginação inconsistente**
+Pacientes e Agendamentos paginam; Profissionais, Objetivos, Evoluções e Encaminhamentos retornam listas completas. Padronizar conforme o volume de dados crescer.
+
+**Refresh token**
+O JWT expira em 7 dias sem mecanismo de renovação. Implementar refresh token para sessões mais longas sem comprometer segurança.
 
 ---
 
