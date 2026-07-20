@@ -14,6 +14,8 @@ import { rotasObjetivos } from './routes/objetivos'
 import { rotasEvolucoes } from './routes/evolucoes'
 import { rotasEncaminhamentos } from './routes/encaminhamentos'
 import { rotasNotificacoes } from './routes/notificacoes'
+import { rotasMensagens } from './routes/mensagens'
+import { rotasConfiguracoes } from './routes/configuracoes'
 
 const app = Fastify({ logger: true })
 
@@ -39,6 +41,8 @@ app.register(async (instance) => {
   instance.register(rotasEvolucoes)
   instance.register(rotasEncaminhamentos)
   instance.register(rotasNotificacoes)
+  instance.register(rotasMensagens)
+  instance.register(rotasConfiguracoes)
 })
 // ── Health check ─────────────────────────────────────────
 app.get('/health', async () => {
