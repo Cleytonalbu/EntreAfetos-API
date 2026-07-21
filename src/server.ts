@@ -24,6 +24,7 @@ const app = Fastify({ logger: true })
 // ── Plugins ──────────────────────────────────────────────
 app.register(cors, {
   origin: true,
+  methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'],
 })
 
 app.register(jwt, {
