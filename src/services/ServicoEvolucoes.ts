@@ -31,6 +31,7 @@ export class ServicoEvolucoes {
     pacienteId: string
     profissionalId: string
     agendamentoId?: string
+    modeloEvolucaoId?: string
     dataAtendimento: string
     horaInicio: string
     horaFim: string
@@ -41,6 +42,7 @@ export class ServicoEvolucoes {
     resultadoGeral?: string
     impactos?: string[]
     observacoes?: string
+    respostas?: any
     rascunho?: boolean
     objetivosSessao?: {
       objetivoId: string
@@ -75,6 +77,7 @@ export class ServicoEvolucoes {
       pacienteId:        dados.pacienteId,
       profissionalId:    dados.profissionalId,
       agendamentoId:     dados.agendamentoId,
+      modeloEvolucaoId:  dados.modeloEvolucaoId,
       dataAtendimento:   new Date(dados.dataAtendimento),
       horaInicio:        new Date(`${dados.dataAtendimento}T${dados.horaInicio}`),
       horaFim:           new Date(`${dados.dataAtendimento}T${dados.horaFim}`),
@@ -85,6 +88,7 @@ export class ServicoEvolucoes {
       resultadoGeral:    dados.resultadoGeral,
       impactos:          dados.impactos,
       observacoes:       dados.observacoes,
+      respostas:         dados.respostas,
       rascunho:          dados.rascunho,
 })
 

@@ -4,6 +4,7 @@ interface DadosEvolucao {
   pacienteId: string
   profissionalId: string
   agendamentoId?: string
+  modeloEvolucaoId?: string
   dataAtendimento: Date
   horaInicio: Date
   horaFim: Date
@@ -14,6 +15,7 @@ interface DadosEvolucao {
   resultadoGeral?: string
   impactos?: string[]
   observacoes?: string
+  respostas?: any
   rascunho?: boolean
 }
 
@@ -85,6 +87,7 @@ export class RepositorioEvolucoes {
             servico: { select: { nome: true, duracaoMin: true } },
           },
         },
+        modeloEvolucao: true,
         objetivosSessao: {
           include: {
             objetivo: {

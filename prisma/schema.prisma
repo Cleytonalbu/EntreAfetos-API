@@ -289,28 +289,31 @@ model Objetivo {
 // ─── EVOLUÇÃO ─────────────────────────────────────────────────────────────────
 
 model Evolucao {
-  id               String    @id @default(uuid())
-  pacienteId       String
-  profissionalId   String
-  agendamentoId    String?   @unique
-  dataAtendimento  DateTime
-  horaInicio       DateTime
-  horaFim          DateTime
-  especialidade    String
-  tipoAtendimento  String
-  localAtendimento String?
-  evolucaoEscrita  String?
-  resultadoGeral   String?
-  impactos         String[]
-  observacoes      String?
-  assinadoEm       DateTime?
-  rascunho         Boolean   @default(false)
+  id                String    @id @default(uuid())
+  pacienteId        String
+  profissionalId    String
+  agendamentoId     String?   @unique
+  modeloEvolucaoId  String?
+  dataAtendimento   DateTime
+  horaInicio        DateTime
+  horaFim           DateTime
+  especialidade     String
+  tipoAtendimento   String
+  localAtendimento  String?
+  evolucaoEscrita   String?
+  resultadoGeral    String?
+  impactos          String[]
+  observacoes       String?
+  respostas         Json?
+  assinadoEm        DateTime?
+  rascunho          Boolean   @default(false)
   criadoEm        DateTime  @default(now())
   atualizadoEm    DateTime  @updatedAt
 
   paciente        Paciente         @relation(fields: [pacienteId], references: [id])
   profissional    Profissional     @relation(fields: [profissionalId], references: [id])
   agendamento     Agendamento?     @relation(fields: [agendamentoId], references: [id])
+  modeloEvolucao  ModeloEvolucao?  @relation(fields: [modeloEvolucaoId], references: [id])
   objetivosSessao ObjetivoSessao[]
   anexos          Anexo[]
   encaminhamentos Encaminhamento[]
@@ -444,5 +447,6 @@ model ModeloEvolucao {
   campos        Json
   criadoEm     DateTime @default(now())
 
-  clinica Clinica @relation(fields: [clinicaId], references: [id])
+  clinica    Clinica    @relation(fields: [clinicaId], references: [id])
+  evolucoes  Evolucao[]
 }

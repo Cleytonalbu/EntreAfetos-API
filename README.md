@@ -877,6 +877,7 @@ POST /evolucoes
   "pacienteId": "uuid",
   "profissionalId": "uuid",
   "agendamentoId": "uuid",
+  "modeloEvolucaoId": "uuid",
   "dataAtendimento": "2026-07-11",
   "horaInicio": "09:00",
   "horaFim": "09:50",
@@ -887,6 +888,7 @@ POST /evolucoes
   "resultadoGeral": "dentro_esperado",
   "impactos": ["comunicacao", "interacao_social", "atencao"],
   "observacoes": "Boa receptividade às atividades propostas",
+  "respostas": { "comportamento_observado": "Tranquilo, engajado nas atividades", "interacao_social": 4 },
   "rascunho": true,
   "objetivosSessao": [
     {
@@ -899,6 +901,8 @@ POST /evolucoes
 ```
 
 Obrigatórios: `pacienteId`, `profissionalId`, `dataAtendimento`, `horaInicio`, `horaFim`, `especialidade`, `tipoAtendimento`.
+
+`modeloEvolucaoId` (opcional) referencia o [Modelo de Evolução](#configurações) usado para preencher a sessão; `respostas` (opcional, JSON livre) guarda as respostas de cada campo do modelo, com a mesma estrutura de chaves definida em `campos.secoes` do modelo. Ambos são independentes de `evolucaoEscrita`/`observacoes` — o frontend decide se usa o formulário livre, um modelo, ou os dois.
 
 | Campo | Valores aceitos |
 |-------|-----------------|
@@ -913,7 +917,7 @@ O array `objetivosSessao` cria os vínculos na tabela pivô `ObjetivoSessao` e a
 GET /evolucoes/:id
 ```
 
-🔒 🔑 `PROFISSIONAL`, `GESTOR` — inclui paciente, profissional, agendamento, objetivos da sessão, anexos e encaminhamentos gerados.
+🔒 🔑 `PROFISSIONAL`, `GESTOR` — inclui paciente, profissional, agendamento, modelo de evolução vinculado, objetivos da sessão, anexos e encaminhamentos gerados.
 
 #### Atualizar
 
