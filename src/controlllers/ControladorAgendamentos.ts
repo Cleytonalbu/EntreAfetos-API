@@ -84,4 +84,15 @@ export class ControladorAgendamentos {
       return reply.status(status).send({ erro: 'Erro', mensagem })
     }
   }
+
+  // Criar bloqueio de agenda
+  async criarBloqueio(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const agendamento = await servico.criarBloqueio(request.body as any)
+      return reply.status(201).send({ agendamento })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
+    }
+  }
 }

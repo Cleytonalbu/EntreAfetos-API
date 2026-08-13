@@ -8,6 +8,7 @@ const STATUS_VALIDOS = [
   'AGENDADO', 'AGUARDANDO', 'EM_ATENDIMENTO', 'CONCLUIDO', 'CANCELADO',
 ]
 
+
 export class ServicoAgendamentos {
 
   async listar(filtros: {
@@ -37,6 +38,7 @@ export class ServicoAgendamentos {
     convenioId?: string
     salaId?: string
     dataHora: string
+    dataFim?: string
     observacoes?: string
     rascunho?: boolean
   }) {
@@ -67,6 +69,7 @@ export class ServicoAgendamentos {
     return repositorio.criar({
       ...dados,
       dataHora: dataAgendamento,
+      dataFim: fimAgendamento,
     })
   }
 
@@ -104,5 +107,38 @@ export class ServicoAgendamentos {
       throw { status: 404, mensagem: 'Agendamento não encontrado' }
     }
     return repositorio.cancelar(id)
+  }
+
+  // Bloqueios
+  async criarBloqueio(dados: {
+    profissionalId: string
+    dataHora: string
+    dataFim: string
+    motivo?: string
+    salaId?: string
+  }) {
+    if (!dados.profissionalId || !dados.dataHora || !dados.dataFim) {
+      throw { status: 400, mensagem: 'profissionalId, dataHora e dataFim são obrigatórios' }
+    }
+
+    const inicio = new Date(dados.dataHora)
+    const fim = new Date(dados.dataFim)
+
+    if (fim <= inicio) {
+      throw { status: 400, mensagem: 'dataFim deve ser posterior a dataHora' }
+    }
+
+    const conflito = await repositorio.buscarConflito(dados.profissionalId, inicio, fim)
+    if (conflito) {
+      throw { status: 409, mensagem: 'O profissional já possui um agendamento ou bloqueio neste horário' }
+    }
+
+    return repositorio.criarBloqueio({
+      profissionalId: dados.profissionalId,
+      dataHora: inicio,
+      dataFim: fim,
+      motivo: dados.motivo,
+      salaId: dados.salaId,
+    })
   }
 }

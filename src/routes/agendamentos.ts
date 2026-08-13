@@ -33,4 +33,9 @@ export async function rotasAgendamentos(app: FastifyInstance) {
   app.delete('/agendamentos/:id', {
     preHandler: [verificarAutenticacao, permitir('RECEPCIONISTA', 'GESTOR')],
   }, controlador.cancelar.bind(controlador))
+
+  // Recepcionista e Gestor bloqueiam horários da agenda
+  app.post('/agendamentos/bloqueio', {
+    preHandler: [verificarAutenticacao, permitir('RECEPCIONISTA', 'GESTOR')],
+  }, controlador.criarBloqueio.bind(controlador))
 }

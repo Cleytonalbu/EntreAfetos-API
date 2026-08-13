@@ -17,8 +17,17 @@ interface DadosAgendamento {
   convenioId?: string
   salaId?: string
   dataHora: Date
+  dataFim?: Date
   observacoes?: string
   rascunho?: boolean
+}
+
+interface DadosBloqueio {
+  profissionalId: string
+  dataHora: Date
+  dataFim: Date
+  motivo?: string
+  salaId?: string
 }
 
 const selectCompleto = {
@@ -124,7 +133,7 @@ export class RepositorioAgendamentos {
 
   async criar(dados: DadosAgendamento) {
     return prisma.agendamento.create({
-      data: dados,
+      data: { ...dados, tipo: 'ATENDIMENTO' },
       include: {
         paciente: { select: { id: true, nome: true } },
         profissional: {
@@ -133,6 +142,25 @@ export class RepositorioAgendamentos {
         servico: true,
         sala: true,
         convenio: true,
+      },
+    })
+  }
+
+  async criarBloqueio(dados: DadosBloqueio) {
+    return prisma.agendamento.create({
+      data: {
+        tipo: 'BLOQUEIO',
+        profissionalId: dados.profissionalId,
+        dataHora: dados.dataHora,
+        dataFim: dados.dataFim,
+        motivo: dados.motivo,
+        salaId: dados.salaId,
+      },
+      include: {
+        profissional: {
+          include: { usuario: { select: { nome: true } } },
+        },
+        sala: true,
       },
     })
   }

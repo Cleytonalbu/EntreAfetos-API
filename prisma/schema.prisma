@@ -64,6 +64,12 @@ enum StatusTransacao {
   VENCIDO
 }
 
+enum TipoAgendamento {
+  ATENDIMENTO
+  BLOQUEIO 
+  
+}
+
 // ─── CLÍNICA ─────────────────────────────────────────────────────────────────
 
 model Clinica {
@@ -212,22 +218,25 @@ model Sala {
 
 model Agendamento {
   id              String            @id @default(uuid())
-  pacienteId      String
+  tipo            TipoAgendamento   @default(ATENDIMENTO)
+  pacienteId      String?
   profissionalId  String
-  servicoId       String
+  servicoId       String?
   especialidadeId String?
   convenioId      String?
   salaId          String?
   dataHora        DateTime
+  dataFim         DateTime?
+  motivo          String?
   status          StatusAgendamento @default(AGENDADO)
   observacoes     String?
   rascunho        Boolean           @default(false)
   criadoEm       DateTime          @default(now())
   atualizadoEm   DateTime          @updatedAt
 
-  paciente      Paciente       @relation(fields: [pacienteId], references: [id])
+  paciente      Paciente?      @relation(fields: [pacienteId], references: [id])
   profissional  Profissional   @relation(fields: [profissionalId], references: [id])
-  servico       Servico        @relation(fields: [servicoId], references: [id])
+  servico       Servico?       @relation(fields: [servicoId], references: [id])
   especialidade Especialidade? @relation(fields: [especialidadeId], references: [id])
   convenio      Convenio?      @relation(fields: [convenioId], references: [id])
   sala          Sala?          @relation(fields: [salaId], references: [id])
