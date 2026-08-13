@@ -26,6 +26,7 @@ API REST da plataforma **Clínica Integrada Entre Afetos** — sistema de gestã
   - [Objetivos](#objetivos)
   - [Evoluções](#evoluções)
   - [Encaminhamentos](#encaminhamentos)
+  - [Financeiro](#financeiro)
   - [Indicadores](#indicadores)
   - [Relatórios](#relatórios)
   - [Notificações](#notificações)
@@ -1054,6 +1055,122 @@ DELETE /encaminhamentos/:id
 🔒 🔑 `PROFISSIONAL`, `GESTOR` — retorna `204`. Define `status = CANCELADO`. Não é possível cancelar um encaminhamento já concluído.
 
 ---
+
+### Financeiro
+
+Receitas (cobranças de pacientes) e despesas da clínica. `RECEPCIONISTA` só enxerga e movimenta transações do tipo `RECEITA` — `DESPESA` é exclusiva do `GESTOR`, mesmo as rotas sendo compartilhadas.
+
+#### Listar
+
+```http
+GET /transacoes?tipo=RECEITA&status=PENDENTE&pacienteId=uuid&dataInicio=2026-01-01&dataFim=2026-12-31&pagina=1
+```
+
+🔒 🔑 `RECEPCIONISTA`, `GESTOR`
+
+Quando quem chama é `RECEPCIONISTA`, o filtro `tipo=RECEITA` é aplicado automaticamente pelo backend, independente do que vier na query.
+
+#### Buscar por ID
+
+```http
+GET /transacoes/:id
+```
+
+🔒 🔑 `RECEPCIONISTA`, `GESTOR` — retorna `403` se `RECEPCIONISTA` tentar buscar uma transação `DESPESA` diretamente por ID.
+
+#### Criar
+
+```http
+POST /transacoes
+```
+
+🔒 🔑 `RECEPCIONISTA`, `GESTOR`
+
+```json
+{
+  "tipo": "RECEITA",
+  "categoria": "Consulta",
+  "descricao": "Sessão de psicologia - João Miguel",
+  "valor": 150.00,
+  "formaPagamento": "Pix",
+  "pacienteId": "uuid",
+  "profissionalId": "uuid",
+  "dataVencimento": "2026-08-20"
+}
+```
+
+Obrigatórios: `tipo`, `categoria`, `descricao`, `valor`. `valor` deve ser maior que zero.
+
+| Erro | Motivo |
+|------|--------|
+| 400 | Campo obrigatório ausente ou `valor` ≤ 0 |
+| 403 | `RECEPCIONISTA` tentando criar `tipo = "DESPESA"` |
+
+#### Atualizar
+
+```http
+PUT /transacoes/:id
+```
+
+🔒 🔑 `RECEPCIONISTA`, `GESTOR` — só funciona enquanto o status é `PENDENTE` ou `VENCIDO`. Transações já `RECEBIDO`/`PAGO`/`CANCELADO` retornam `400`. `RECEPCIONISTA` recebe `403` ao tentar editar uma `DESPESA`.
+
+#### Alterar status (dar baixa)
+
+```http
+PATCH /transacoes/:id/status
+```
+
+🔒 🔑 `RECEPCIONISTA`, `GESTOR`
+
+```json
+{ "status": "RECEBIDO" }
+```
+
+Valores: `PENDENTE`, `RECEBIDO`, `PAGO`, `VENCIDO`, `CANCELADO`. Marcar como `RECEBIDO` ou `PAGO` preenche `dataPagamento` automaticamente. Transações já finalizadas (`PAGO`, `RECEBIDO` ou `CANCELADO`) não podem ter o status alterado de novo.
+
+#### Cancelar
+
+```http
+DELETE /transacoes/:id
+```
+
+🔒 🔑 `GESTOR` — retorna `204`. Define `status = CANCELADO` (soft delete, segue o padrão do resto da API).
+
+#### Histórico financeiro do paciente
+
+```http
+GET /pacientes/:id/financeiro
+```
+
+🔒 🔑 `RECEPCIONISTA`, `GESTOR`
+
+#### Dashboard financeiro
+
+```http
+GET /financeiro/dashboard?dataInicio=2026-01-01&dataFim=2026-12-31
+```
+
+🔒 🔑 `GESTOR`
+
+```json
+{
+  "periodo": { "dataInicio": "...", "dataFim": "..." },
+  "resumo": {
+    "totalReceitas": 18500.00,
+    "totalDespesas": 6200.00,
+    "saldo": 12300.00,
+    "quantidadeReceitas": 124,
+    "quantidadeDespesas": 18
+  },
+  "porCategoria": [
+    { "categoria": "Consulta", "tipo": "RECEITA", "total": 15200.00 }
+  ]
+}
+```
+
+Quando `dataInicio`/`dataFim` não são informados, o período padrão é dos últimos 6 meses até hoje, igual aos Indicadores.
+
+---
 ### Indicadores
 
 Agregações para os dashboards. Todas as rotas aceitam `dataInicio` e `dataFim` (`YYYY-MM-DD`); quando omitidos, o período padrão é dos últimos 6 meses até hoje.
@@ -1531,9 +1648,9 @@ O campo `campos` é JSON livre — o frontend interpreta a estrutura para render
 | Notificações | 6 | ✅ |
 | Mensagens | 5 | ✅ |
 | Configurações | 10 | ✅ |
-| **Financeiro** | — | ⏭️ Não implementado |
+| Financeiro | 8 | ✅ |
 
-Total: **18 módulos**, **~100 rotas**.
+Total: **18 módulos**, **~108 rotas**.
 
 ---
 
@@ -1546,9 +1663,6 @@ O model `Mensagem` só tem `remetenteId`. O campo `lida` não faz sentido sem al
 
 **Upload de anexos**
 O model `Anexo` existe e as evoluções já retornam o array, mas não há rota de upload implementada. Falta definir o storage (S3 ou similar) e criar `POST /evolucoes/:id/anexos`.
-
-**Módulo Financeiro**
-Models `Transacao` e enums já estão no schema. Faltam repositório, service, controller e rotas.
 
 **Portal do responsável**
 As telas mapeadas não incluem login para pais/responsáveis. Se for necessário, exige um quarto papel e revisão do RBAC.
