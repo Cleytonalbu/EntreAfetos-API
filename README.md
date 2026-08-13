@@ -673,6 +673,35 @@ DELETE /agendamentos/:id
 
 🔒 🔑 `RECEPCIONISTA`, `GESTOR` — retorna `204`. Define `status = CANCELADO`.
 
+#### Bloquear horário
+
+```http
+POST /agendamentos/bloqueio
+```
+
+🔒 🔑 `RECEPCIONISTA`, `GESTOR`
+
+```json
+{
+  "profissionalId": "uuid",
+  "dataHora": "2026-08-20T12:00:00",
+  "dataFim": "2026-08-20T13:00:00",
+  "motivo": "Almoço",
+  "salaId": "uuid"
+}
+```
+
+Obrigatórios: `profissionalId`, `dataHora`, `dataFim`. `motivo` e `salaId` são opcionais.
+
+Cria um `Agendamento` com `tipo = BLOQUEIO`, sem `pacienteId` nem `servicoId`. Usa a mesma verificação de conflito de horário dos atendimentos — um bloqueio impede criar atendimento no mesmo horário do profissional, e vice-versa. `GET /agendamentos` retorna bloqueios misturados com atendimentos na listagem; nesses registros `paciente` e `servico` vêm `null`, e o front deve usar o campo `tipo` para diferenciar a renderização na agenda.
+
+Para **desbloquear**, use a rota de cancelamento existente: `DELETE /agendamentos/:id` (define `status = CANCELADO` e libera o horário).
+
+| Erro | Motivo |
+|------|--------|
+| 400 | `profissionalId`, `dataHora` ou `dataFim` ausentes, ou `dataFim` anterior/igual a `dataHora` |
+| 409 | O profissional já tem agendamento ou bloqueio nesse horário |
+
 ---
 
 ### Plano Terapêutico
@@ -1492,7 +1521,7 @@ O campo `campos` é JSON livre — o frontend interpreta a estrutura para render
 | Serviços | 5 | ✅ |
 | Convênios | 5 | ✅ |
 | Salas | 5 | ✅ |
-| Agendamentos | 6 | ✅ |
+| Agendamentos | 7 | ✅ |
 | Plano Terapêutico | 6 | ✅ |
 | Objetivos | 7 | ✅ |
 | Evoluções | 6 | ✅ |
