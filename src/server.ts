@@ -2,6 +2,8 @@ import Fastify from 'fastify'
 import cors from '@fastify/cors'
 import jwt from '@fastify/jwt'
 import 'dotenv/config'
+import multipart from '@fastify/multipart'
+import { rotasAnexos } from './routes/rotasAnexos'
 
 // Rotas
 import { rotasAutenticacao } from './routes/autenticacao'
@@ -65,3 +67,9 @@ app.listen({ port: PORT, host: '0.0.0.0' }, (err) => {
     process.exit(1)
   }
 })
+
+app.register(multipart, {
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB — mesmo limite validado no service
+})
+
+app.register(rotasAnexos)
