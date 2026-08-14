@@ -6,27 +6,27 @@ const controlador = new ControladorMensagens()
 
 export async function rotasMensagens(app: FastifyInstance) {
 
-  // Listar mensagens do usuário logado
+  // ?com=usuarioId filtra a conversa com uma pessoa específica; sem o filtro, traz tudo que o usuário enviou/recebeu
   app.get('/mensagens', {
     preHandler: [verificarAutenticacao],
   }, controlador.listar.bind(controlador))
 
-  // Buscar mensagem por ID
   app.get('/mensagens/:id', {
     preHandler: [verificarAutenticacao],
   }, controlador.buscarPorId.bind(controlador))
 
-  // Criar mensagem
   app.post('/mensagens', {
     preHandler: [verificarAutenticacao],
   }, controlador.criar.bind(controlador))
 
-  // Marcar como lida
   app.patch('/mensagens/:id/lida', {
     preHandler: [verificarAutenticacao],
   }, controlador.marcarComoLida.bind(controlador))
 
-  // Remover mensagem
+  app.patch('/mensagens/todas/lidas', {
+    preHandler: [verificarAutenticacao],
+  }, controlador.marcarTodasComoLidas.bind(controlador))
+
   app.delete('/mensagens/:id', {
     preHandler: [verificarAutenticacao],
   }, controlador.remover.bind(controlador))

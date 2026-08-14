@@ -1,37 +1,39 @@
 import { RepositorioMensagens } from '../repositories/RepositorioMensagens'
+import prisma from '../lib/prisma'
 
 const repositorio = new RepositorioMensagens()
 
 export class ServicoMensagens {
 
-  async listar(usuarioId: string) {
-    const mensagens    = await repositorio.listar(usuarioId)
-    const totalNaoLidas = await repositorio.contarNaoLidas(usuarioId)
-    return { mensagens, totalNaoLidas }
+  async listar(usuarioId: string, comUsuarioId?: string) {
+    return repositorio.listarDoUsuario(usuarioId, comUsuarioId)
   }
 
-  async buscarPorId(id: string) {
+  async buscarPorId(id: string, usuarioId: string) {
     const mensagem = await repositorio.buscarPorId(id)
     if (!mensagem) {
       throw { status: 404, mensagem: 'Mensagem não encontrada' }
     }
+    if (mensagem.remetente.id !== usuarioId && mensagem.destinatario.id !== usuarioId) {
+      throw { status: 403, mensagem: 'Acesso negado' }
+    }
     return mensagem
   }
 
-  async criar(dados: { remetenteId: string; texto: string }) {
-    if (!dados.remetenteId || !dados.texto) {
-      throw { status: 400, mensagem: 'remetenteId e texto são obrigatórios' }
+  async criar(remetenteId: string, dados: { destinatarioId: string; texto: string }) {
+    if (!dados.destinatarioId || !dados.texto?.trim()) {
+      throw { status: 400, mensagem: 'destinatarioId e texto são obrigatórios' }
+    }
+    if (dados.destinatarioId === remetenteId) {
+      throw { status: 400, mensagem: 'Não é possível enviar mensagem para si mesmo' }
     }
 
-    if (dados.texto.trim().length === 0) {
-      throw { status: 400, mensagem: 'O texto da mensagem não pode estar vazio' }
+    const destinatario = await prisma.usuario.findUnique({ where: { id: dados.destinatarioId } })
+    if (!destinatario || !destinatario.ativo) {
+      throw { status: 404, mensagem: 'Destinatário não encontrado ou inativo' }
     }
 
-    if (dados.texto.length > 1000) {
-      throw { status: 400, mensagem: 'O texto da mensagem não pode ter mais de 1000 caracteres' }
-    }
-
-    return repositorio.criar(dados)
+    return repositorio.criar({ remetenteId, destinatarioId: dados.destinatarioId, texto: dados.texto.trim() })
   }
 
   async marcarComoLida(id: string, usuarioId: string) {
@@ -39,12 +41,14 @@ export class ServicoMensagens {
     if (!mensagem) {
       throw { status: 404, mensagem: 'Mensagem não encontrada' }
     }
-
-    if (mensagem.remetenteId !== usuarioId) {
-      throw { status: 403, mensagem: 'Você não tem permissão para acessar esta mensagem' }
+    if (mensagem.destinatario.id !== usuarioId) {
+      throw { status: 403, mensagem: 'Apenas o destinatário pode marcar a mensagem como lida' }
     }
-
     return repositorio.marcarComoLida(id)
+  }
+
+  async marcarTodasComoLidas(usuarioId: string, comUsuarioId?: string) {
+    return repositorio.marcarTodasComoLidas(usuarioId, comUsuarioId)
   }
 
   async remover(id: string, usuarioId: string) {
@@ -52,11 +56,9 @@ export class ServicoMensagens {
     if (!mensagem) {
       throw { status: 404, mensagem: 'Mensagem não encontrada' }
     }
-
-    if (mensagem.remetenteId !== usuarioId) {
-      throw { status: 403, mensagem: 'Você não tem permissão para remover esta mensagem' }
+    if (mensagem.remetente.id !== usuarioId && mensagem.destinatario.id !== usuarioId) {
+      throw { status: 403, mensagem: 'Acesso negado' }
     }
-
     return repositorio.remover(id)
   }
 }

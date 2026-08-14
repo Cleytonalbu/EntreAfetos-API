@@ -110,9 +110,10 @@ model Usuario {
   criadoEm    DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  profissional  Profissional?
-  notificacoes  Notificacao[]
-  mensagens     Mensagem[]
+  profissional        Profissional?
+  notificacoes        Notificacao[]
+  mensagensEnviadas   Mensagem[] @relation("MensagensEnviadas")
+  mensagensRecebidas  Mensagem[] @relation("MensagensRecebidas")
 }
 
 // ─── ESPECIALIDADE ────────────────────────────────────────────────────────────
@@ -429,13 +430,18 @@ model Notificacao {
 }
 
 model Mensagem {
-  id         String   @id @default(uuid())
-  remetenteId String
-  texto      String
-  lida       Boolean  @default(false)
-  criadoEm  DateTime @default(now())
+  id             String   @id @default(uuid())
+  remetenteId    String
+  destinatarioId String
+  texto          String
+  lida           Boolean  @default(false)
+  criadoEm      DateTime @default(now())
 
-  remetente Usuario @relation(fields: [remetenteId], references: [id])
+  remetente    Usuario @relation("MensagensEnviadas", fields: [remetenteId], references: [id])
+  destinatario Usuario @relation("MensagensRecebidas", fields: [destinatarioId], references: [id])
+
+  @@index([remetenteId, destinatarioId])
+  @@index([destinatarioId, lida])
 }
 
 // ─── CONFIGURAÇÕES ────────────────────────────────────────────────────────────
@@ -460,3 +466,4 @@ model ModeloEvolucao {
   clinica    Clinica    @relation(fields: [clinicaId], references: [id])
   evolucoes  Evolucao[]
 }
+

@@ -8,9 +8,10 @@ export class ControladorMensagens {
 
   async listar(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const usuarioId = request.user.id
-      const resultado = await servico.listar(usuarioId)
-      return reply.send(resultado)
+      const { com } = request.query as any
+      const usuarioId = (request.user as any).id
+      const mensagens = await servico.listar(usuarioId, com)
+      return reply.send({ mensagens })
     } catch (err) {
       const { status, mensagem } = tratarErroPrisma(err)
       return reply.status(status).send({ erro: 'Erro', mensagem })
@@ -20,7 +21,8 @@ export class ControladorMensagens {
   async buscarPorId(request: FastifyRequest, reply: FastifyReply) {
     try {
       const { id } = request.params as any
-      const mensagem = await servico.buscarPorId(id)
+      const usuarioId = (request.user as any).id
+      const mensagem = await servico.buscarPorId(id, usuarioId)
       return reply.send({ mensagem })
     } catch (err) {
       const { status, mensagem } = tratarErroPrisma(err)
@@ -30,9 +32,8 @@ export class ControladorMensagens {
 
   async criar(request: FastifyRequest, reply: FastifyReply) {
     try {
-      const remetenteId = request.user.id
-      const { texto } = request.body as any
-      const mensagem = await servico.criar({ remetenteId, texto })
+      const usuarioId = (request.user as any).id
+      const mensagem = await servico.criar(usuarioId, request.body as any)
       return reply.status(201).send({ mensagem })
     } catch (err) {
       const { status, mensagem } = tratarErroPrisma(err)
@@ -43,9 +44,21 @@ export class ControladorMensagens {
   async marcarComoLida(request: FastifyRequest, reply: FastifyReply) {
     try {
       const { id } = request.params as any
-      const usuarioId = request.user.id
+      const usuarioId = (request.user as any).id
       const mensagem = await servico.marcarComoLida(id, usuarioId)
       return reply.send({ mensagem })
+    } catch (err) {
+      const { status, mensagem } = tratarErroPrisma(err)
+      return reply.status(status).send({ erro: 'Erro', mensagem })
+    }
+  }
+
+  async marcarTodasComoLidas(request: FastifyRequest, reply: FastifyReply) {
+    try {
+      const { com } = request.query as any
+      const usuarioId = (request.user as any).id
+      await servico.marcarTodasComoLidas(usuarioId, com)
+      return reply.status(204).send()
     } catch (err) {
       const { status, mensagem } = tratarErroPrisma(err)
       return reply.status(status).send({ erro: 'Erro', mensagem })
@@ -55,7 +68,7 @@ export class ControladorMensagens {
   async remover(request: FastifyRequest, reply: FastifyReply) {
     try {
       const { id } = request.params as any
-      const usuarioId = request.user.id
+      const usuarioId = (request.user as any).id
       await servico.remover(id, usuarioId)
       return reply.status(204).send()
     } catch (err) {
