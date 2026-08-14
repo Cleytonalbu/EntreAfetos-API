@@ -49,6 +49,8 @@ API REST da plataforma **Clínica Integrada Entre Afetos** — sistema de gestã
 | Banco | PostgreSQL 16 |
 | Autenticação | JWT (`@fastify/jwt`) |
 | Hash de senha | bcryptjs |
+| Upload de arquivos | @fastify/multipart |
+| Storage de anexos | Cloudflare R2 (S3-compatible) |
 | Container | Docker |
 
 ---
@@ -157,6 +159,13 @@ cp .env.example .env
 DATABASE_URL="postgresql://postgres:postgres123@localhost:5432/entre_afetos"
 JWT_SECRET="sua-chave-secreta"
 PORT=3333
+
+# Storage de anexos (Cloudflare R2)
+R2_ACCOUNT_ID=
+R2_ACCESS_KEY_ID=
+R2_SECRET_ACCESS_KEY=
+R2_BUCKET_NAME=entre-afetos-anexos
+STORAGE_PREFIX=
 ```
 
 ### Subir o banco
@@ -983,6 +992,45 @@ DELETE /evolucoes/:id
 
 🔒 🔑 `PROFISSIONAL`, `GESTOR` — retorna `204`. Só remove rascunhos; evoluções assinadas retornam `400`.
 
+#### Anexos
+
+Arquivos anexados a uma evolução (laudos, fotos, documentos). Armazenados no Cloudflare R2 — o campo `url` no banco guarda a **chave do objeto**, nunca uma URL pública fixa, já que anexo é prontuário.
+
+```http
+POST /evolucoes/:id/anexos
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR` — `multipart/form-data`, campo `file`.
+
+Tipos aceitos: PDF, JPG, PNG, WEBP, DOC, DOCX. Limite de 10MB por arquivo. Bloqueado se a evolução já estiver assinada.
+
+| Erro | Motivo |
+|------|--------|
+| 400 | Tipo de arquivo não permitido, arquivo acima de 10MB, ou evolução já assinada |
+| 404 | Evolução não encontrada |
+
+```http
+GET /evolucoes/:id/anexos
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR` — lista os anexos da evolução.
+
+```http
+GET /anexos/:id/download
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR` — gera uma URL assinada do R2 com validade de 5 minutos. O front baixa o arquivo direto do storage, sem passar pela API.
+
+```json
+{ "url": "https://...", "nomeArquivo": "laudo.pdf", "expiraEmSegundos": 300 }
+```
+
+```http
+DELETE /anexos/:id
+```
+
+🔒 🔑 `PROFISSIONAL`, `GESTOR` — retorna `204`. Remove o arquivo do R2 e o registro do banco (hard delete).
+
 ---
 
 ### Encaminhamentos
@@ -1482,25 +1530,61 @@ DELETE /notificacoes
 
 ### Mensagens
 
-Comunicação interna da clínica. O remetente vem do token.
+Comunicação interna 1-a-1 entre usuários da clínica. O remetente vem do token; o destinatário é obrigatório.
 
 ```http
-GET    /mensagens             🔒
-GET    /mensagens/:id         🔒
-POST   /mensagens             🔒
-PATCH  /mensagens/:id/lida    🔒
-DELETE /mensagens/:id         🔒
+GET    /mensagens                🔒
+GET    /mensagens/:id            🔒
+POST   /mensagens                🔒
+PATCH  /mensagens/:id/lida       🔒
+PATCH  /mensagens/todas/lidas    🔒
+DELETE /mensagens/:id            🔒
 ```
 
-Criação:
+#### Listar
+
+```http
+GET /mensagens?com=usuarioId
+```
+
+Sem o parâmetro `com`, retorna tudo que o usuário logado enviou ou recebeu, misturado. Com `com=usuarioId`, filtra só a conversa entre o usuário logado e esse destinatário específico — é o padrão pra montar uma tela de chat 1-a-1.
+
+#### Criar
 
 ```json
-{ "texto": "Reunião de alinhamento hoje às 14h na sala 1." }
+{ "destinatarioId": "uuid", "texto": "Reunião de alinhamento hoje às 14h na sala 1." }
 ```
 
-Limite de 1000 caracteres. Só o remetente pode marcar como lida ou remover.
+Obrigatórios: `destinatarioId`, `texto`. Não é possível enviar mensagem pra si mesmo, e o destinatário precisa ser um usuário ativo.
 
-> ⚠️ Ver [Débitos técnicos](#débitos-técnicos) — o modelo atual não tem destinatário.
+| Erro | Motivo |
+|------|--------|
+| 400 | `destinatarioId`/`texto` ausente, ou tentativa de enviar pra si mesmo |
+| 404 | Destinatário não encontrado ou inativo |
+
+#### Marcar como lida
+
+```http
+PATCH /mensagens/:id/lida
+```
+
+🔒 Só o destinatário pode marcar como lida — o remetente recebe `403`.
+
+#### Marcar todas como lidas
+
+```http
+PATCH /mensagens/todas/lidas?com=usuarioId
+```
+
+Marca como lidas todas as mensagens recebidas pelo usuário logado. Com `com=usuarioId`, restringe às mensagens vindas dessa pessoa específica.
+
+#### Remover
+
+```http
+DELETE /mensagens/:id
+```
+
+🔒 Remetente ou destinatário podem remover. Hard delete — sem soft-delete pra esse model, igual `Notificacao`.
 
 ---
 
@@ -1641,28 +1725,22 @@ O campo `campos` é JSON livre — o frontend interpreta a estrutura para render
 | Agendamentos | 7 | ✅ |
 | Plano Terapêutico | 6 | ✅ |
 | Objetivos | 7 | ✅ |
-| Evoluções | 6 | ✅ |
+| Evoluções | 10 | ✅ |
 | Encaminhamentos | 5 | ✅ |
 | Indicadores | 5 | ✅ |
 | Relatórios | 5 | ✅ |
 | Notificações | 6 | ✅ |
-| Mensagens | 5 | ✅ |
+| Mensagens | 6 | ✅ |
 | Configurações | 10 | ✅ |
 | Financeiro | 8 | ✅ |
 
-Total: **18 módulos**, **~108 rotas**.
+Total: **18 módulos**, **~113 rotas**.
 
 ---
 
 ## Débitos técnicos
 
 Pontos conhecidos a resolver conforme o projeto evolui:
-
-**Mensagens sem destinatário**
-O model `Mensagem` só tem `remetenteId`. O campo `lida` não faz sentido sem alguém que receba. Refatorar para incluir `destinatarioId` e transformar em chat interno de fato, ou considerar integração com WhatsApp para comunicação com responsáveis.
-
-**Upload de anexos**
-O model `Anexo` existe e as evoluções já retornam o array, mas não há rota de upload implementada. Falta definir o storage (S3 ou similar) e criar `POST /evolucoes/:id/anexos`.
 
 **Portal do responsável**
 As telas mapeadas não incluem login para pais/responsáveis. Se for necessário, exige um quarto papel e revisão do RBAC.
